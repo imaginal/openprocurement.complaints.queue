@@ -59,7 +59,7 @@ def main():
 
     logging.config.fileConfig(sys.argv[1])
 
-    parser = MyConfigParser()
+    parser = MyConfigParser(allow_no_value=True)
     parser.read(sys.argv[1])
 
     daemonize(parser.get('general', 'daemonize'))

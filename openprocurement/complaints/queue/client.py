@@ -15,6 +15,7 @@ class ComplaintsClient(object):
         'host_url': "https://api-sandbox.openprocurement.org",
         'api_version': '0.12',
         'params': {},
+        'skip_till': None,
     }
 
     complaint_date_fields = ['dateSubmitted', 'dateAnswered',
@@ -26,6 +27,7 @@ class ComplaintsClient(object):
         if client_config:
             self.client_config.update(client_config)
         logger.info("Create client {}".format(self.client_config))
+        self.conf_skip_till = self.client_config.pop('skip_till')
         self.client = Client(**self.client_config)
         self.reset_client()
 
@@ -103,10 +105,10 @@ class ComplaintsClient(object):
         return False
 
     def reset_client(self):
-        logger.info("Reset client params")
+        logger.info("Reset client params, skip_till=%s", self.conf_skip_till)
         self.client.params.pop('offset', None)
+        self.skip_till = self.conf_skip_till
         self.reset_time = time()
-        self.skip_till = None
 
     def run(self, sleep_time=10):
         while not self.should_stop:
