@@ -6,11 +6,6 @@ from ConfigParser import ConfigParser
 
 from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
 
-default_config = {
-    'pidfile': None,
-    'daemonize': None,
-}
-
 
 def daemonize(filename=False):
     if not filename:
@@ -49,6 +44,15 @@ def pidfile(filename):
     return lock_file
 
 
+class MyConfigParser(ConfigParser):
+    def get(self, section, option, default=None):
+        try:
+            value = ConfigParser.get(self, section, option)
+        except ConfigParser.Error:
+            value = default
+        return value
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: complaints_queue config.ini")
@@ -56,7 +60,7 @@ def main():
 
     logging.config.fileConfig(sys.argv[1])
 
-    parser = ConfigParser(defaults=default_config)
+    parser = MyConfigParser()
     parser.read(sys.argv[1])
 
     daemonize(parser.get('general', 'daemonize'))
