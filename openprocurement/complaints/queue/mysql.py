@@ -16,7 +16,7 @@ class ComplaintsToMySQL(ComplaintsClient):
     }
 
     def __init__(self, client_config=None, mysql_config=None):
-        ComplaintsClient.__init__(self, client_config)
+        super(ComplaintsToMySQL, self).__init__(client_config)
         if mysql_config:
             self.mysql_config.update(mysql_config)
         # remove passwd before dump config to log

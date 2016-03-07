@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ComplaintsClient:
+class ComplaintsClient(object):
     """OpenProcurement Complaints client"""
 
     client_config = {

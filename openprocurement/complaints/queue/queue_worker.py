@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-import atexit
-import fcntl, os, sys
-import logging.config
-from ConfigParser import ConfigParser
+import atexit, fcntl, os, sys
+import logging, logging.config
 
+from ConfigParser import ConfigParser, Error as ConfigParserError
 from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
 
 
@@ -48,7 +47,7 @@ class MyConfigParser(ConfigParser):
     def get(self, section, option, default=None):
         try:
             value = ConfigParser.get(self, section, option)
-        except ConfigParser.Error:
+        except ConfigParserError:
             value = default
         return value
 
