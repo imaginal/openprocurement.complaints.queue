@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import atexit
 import fcntl, os, sys
 import logging.config
 from ConfigParser import ConfigParser
@@ -7,17 +8,44 @@ from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
 
 default_config = {
     'pidfile': None,
+    'daemonize': None,
 }
 
 
-def pidfile(name):
-    if not name:
+def daemonize(filename=False):
+    if not filename:
+        return
+
+    if os.fork() > 0:
+        sys.exit(0)
+
+    os.chdir("/")
+    os.setsid()
+
+    if os.fork() > 0:
+        sys.exit(0)
+
+    fout = file(filename, 'a+')
+    ferr = file(filename, 'a+', 0)
+    sys.stdin.close(), os.close(0)
+    os.dup2(fout.fileno(), 1)
+    os.dup2(ferr.fileno(), 2)
+
+
+def delpid(lock_file, filename):
+    lock_file.close()
+    os.remove(filename)
+
+
+def pidfile(filename):
+    if not filename:
         return
     # try get exclusive lock to prevent second start
-    lock_file = open(name, "w")
+    lock_file = open(filename, "w")
     fcntl.lockf(lock_file, fcntl.LOCK_EX+fcntl.LOCK_NB)
     lock_file.write(str(os.getpid())+"\n")
     lock_file.flush()
+    atexit.register(delpid, lock_file, filename)
     return lock_file
 
 
@@ -31,6 +59,7 @@ def main():
     parser = ConfigParser(defaults=default_config)
     parser.read(sys.argv[1])
 
+    daemonize(parser.get('general', 'daemonize'))
     pidfile(parser.get('general', 'pidfile'))
 
     client_config = parser.items('client')

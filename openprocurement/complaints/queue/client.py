@@ -73,22 +73,26 @@ class ComplaintsClient:
 
     def process_all(self, sleep_time=1):
         while not self.should_stop:
-            tenders_list = self.client.get_tenders()
+            try:
+                tenders_list = self.client.get_tenders()
+            except Exception as e:
+                logger.error("Fail get_tenders {}".format(self.client_config))
+                sleep(sleep_time)
+                continue
 
             if not tenders_list:
                 break
 
             for tender in tenders_list:
+                if self.should_stop:
+                    break
                 if self.skip_till > tender.dateModified:
                     logger.debug("Ignore T=%s D=%s", tender.id, tender.dateModified)
                     continue
                 try:
                     self.process_tender(tender)
                 except Exception as e:
-                    logger.error("Fail on {} error {}: {}".format(tender,
-                        type(e), e))
-                if self.should_stop:
-                    break
+                    logger.error("Fail on {} error {}: {}".format(tender, type(e), e))
 
             if sleep_time:
                 sleep(sleep_time)
