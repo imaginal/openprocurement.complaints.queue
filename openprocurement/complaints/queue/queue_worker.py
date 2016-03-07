@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-import atexit, fcntl, os, sys
-import logging, logging.config
+import os
+import sys
+import fcntl
+import atexit
+import signal
+import logging
+import logging.config
 
 from ConfigParser import ConfigParser, Error as ConfigParserError
 from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
-
 
 def daemonize(filename=False):
     if not filename or filename == 'no':
@@ -43,6 +47,10 @@ def pidfile(filename):
     return lock_file
 
 
+def signal_handler(signo, frame):
+    sys.exit(0)
+
+
 class MyConfigParser(ConfigParser):
     def get(self, section, option, default=None):
         try:
@@ -61,6 +69,8 @@ def main():
 
     parser = MyConfigParser(allow_no_value=True)
     parser.read(sys.argv[1])
+
+    signal.signal(signal.SIGTERM, signal_handler)
 
     daemonize(parser.get('general', 'daemonize'))
     pidfile(parser.get('general', 'pidfile'))
