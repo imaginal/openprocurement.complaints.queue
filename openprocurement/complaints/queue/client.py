@@ -107,7 +107,7 @@ class ComplaintsClient(object):
         return False
 
     def reset_client(self):
-        logger.info("Reset client params, skip_until=%s", self.conf_skip_until)
+        logger.info("Reset client params, set skip_until=%s", self.conf_skip_until)
         self.client.params.pop('offset', None)
         self.skip_until = self.conf_skip_until
         self.reset_time = time()
