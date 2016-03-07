@@ -21,6 +21,7 @@ class ComplaintsClient(object):
 
     complaint_date_fields = ['dateSubmitted', 'dateAnswered',
         'dateEscalated', 'dateDecision', 'dateCanceled']
+    store_tender_fields = ['id', 'tenderID', 'title', 'procuringEntity']
 
     should_stop = False
 
@@ -33,11 +34,11 @@ class ComplaintsClient(object):
         self.client = Client(**self.client_config)
         self.reset_client()
 
-    def test_exists(self, tender_id, complaint_id, complaint_date):
+    def test_exists(self, complaint_id, complaint_date):
         return False
 
-    def store(self, tender, complaint, complaint_path, complaint_date):
-        logger.debug("Fake Store T=%s C=%s P=%s D=%s S=%s", tender.id, complaint.id,
+    def store(self, complaint, complaint_path, complaint_date):
+        logger.debug("Fake Store C=%s P=%s D=%s S=%s", complaint.id,
             complaint_path, complaint_date, complaint.status)
 
     def complaint_date(self, complaint):
@@ -47,14 +48,21 @@ class ComplaintsClient(object):
                 date = complaint[k]
         return date
 
+    def update_before_store(self, tender, complaint):
+        if 'complaintID' not in complaint:
+            complaint['complaintID'] = "{}.{}".format(tender.tenderID, complaint.id[:4])
+        complaint['tender'] = dict((k, tender.get(k)) for k in self.store_tender_fields)
+
     def process_complaint(self, tender, complaint_path, complaint):
         complaint_date = self.complaint_date(complaint)
 
-        logger.info("Process T=%s C=%s P=%s D=%s S=%s", tender.id, complaint.id,
-            complaint_path, complaint_date, complaint.status)
+        logger.info("Process T=%s P=%s C=%s D=%s S=%s", tender.id, complaint_path,
+            complaint.id, complaint_date, complaint.status)
 
-        if not self.test_exists(tender.id, complaint_path, complaint_date):
-            self.store(tender, complaint, complaint_path, complaint_date)
+        if not self.test_exists(complaint.id, complaint_date):
+            path = "{}/{}".format(tender.id, complaint_path)
+            self.update_before_store(tender, complaint)
+            self.store(complaint, path, complaint_date)
 
     def process_tender(self, tender):
         logger.debug("Process T=%s D=%s", tender.id, tender.dateModified)
@@ -107,7 +115,7 @@ class ComplaintsClient(object):
         return False
 
     def reset_client(self):
-        logger.info("Reset client params, set skip_until=%s", self.conf_skip_until)
+        logger.info("Reset client params, set skip_until to %s", self.conf_skip_until)
         self.client.params.pop('offset', None)
         self.skip_until = self.conf_skip_until
         self.reset_time = time()

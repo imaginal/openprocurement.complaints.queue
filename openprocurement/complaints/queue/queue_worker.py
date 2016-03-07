@@ -7,7 +7,7 @@ from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
 
 
 def daemonize(filename=False):
-    if not filename:
+    if not filename or filename == 'no':
         return
 
     if os.fork() > 0:
