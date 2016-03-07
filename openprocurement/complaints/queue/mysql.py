@@ -26,7 +26,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.db = MySQLdb.Connect(passwd=passwd, **self.mysql_config)
         self.cursor = self.db.cursor()
         self.create_table()
-        self.update_skip_till()
+        self.update_skip_until()
 
     def execute_query(self, sql, *args):
         return self.cursor.execute(sql.format(table_name=self.table_name), *args)
@@ -52,13 +52,13 @@ class ComplaintsToMySQL(ComplaintsClient):
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
 
-    def update_skip_till(self):
+    def update_skip_until(self):
         self.execute_query("SELECT MAX(complaint_date) FROM {table_name}")
         row = self.cursor.fetchone()
         if row and row[0]:
             row_date = row[0][:10]
-            logger.info("Skip till %s", row_date)
-            self.skip_till = row_date
+            logger.info("Update skip_until from database, set to %s", row_date)
+            self.skip_until = row_date
 
     def test_exists(self, tender_id, complaint_id, complaint_date):
         self.execute_query(("SELECT complaint_date FROM {table_name} "+
