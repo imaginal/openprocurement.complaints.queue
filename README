@@ -1,0 +1,5 @@
+OpenProcurement complaints queue
+
+This software sync tender complaints with mysql backend
+
+Usage: bin/complaints_queue config.ini
