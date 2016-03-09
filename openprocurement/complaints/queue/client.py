@@ -4,6 +4,7 @@ from iso8601 import parse_date
 from datetime import datetime
 from openprocurement_client.client import Client
 
+import traceback
 import logging
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ class ComplaintsClient(object):
 
     complaint_date_fields = ['dateSubmitted', 'dateAnswered',
         'dateEscalated', 'dateDecision', 'dateCanceled']
-    store_tender_fields = ['id', 'tenderID', 'title', 'procuringEntity']
+    store_tender_fields = ['id', 'tenderID', 'title', 'procuringEntity',
+        'procurementMethod', 'procurementMethodType']
 
     should_stop = False
 
@@ -89,7 +91,7 @@ class ComplaintsClient(object):
                 tenders_list = self.client.get_tenders()
             except Exception as e:
                 logger.error("Fail get_tenders {}".format(self.client_config))
-                sleep(sleep_time)
+                sleep(10*sleep_time)
                 continue
 
             if not tenders_list:
@@ -105,6 +107,7 @@ class ComplaintsClient(object):
                     self.process_tender(tender)
                 except Exception as e:
                     logger.error("Fail on {} error {}: {}".format(tender, type(e), e))
+                    traceback.print_exc()
 
             if sleep_time:
                 sleep(sleep_time)

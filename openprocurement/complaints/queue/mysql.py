@@ -39,10 +39,13 @@ class ComplaintsToMySQL(ComplaintsClient):
                   complaint_date varchar(32) NOT NULL,
                   complaint_status varchar(16) NOT NULL,
                   complaint_json blob NOT NULL,
+                  tender_procurementMethod varchar(16) NOT NULL,
+                  tender_procurementMethodType varchar(32) NOT NULL,
                   PRIMARY KEY (complaint_id),
                   KEY complaint_complaintID (complaint_complaintID),
                   KEY complaint_date (complaint_date),
-                  KEY complaint_status (complaint_status)
+                  KEY complaint_status (complaint_status),
+                  KEY tender_procurementMethod (tender_procurementMethod)
                 ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             """
         try:
@@ -68,10 +71,12 @@ class ComplaintsToMySQL(ComplaintsClient):
     def store(self, complaint, complaint_path, complaint_date):
         complaint_json = json.dumps(complaint)
         self.execute_query(("INSERT INTO {table_name} "+
-            "VALUES (%s, %s, %s, %s, %s, %s) "+
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "+
             "ON DUPLICATE KEY UPDATE "+
             "complaint_date=%s, complaint_status=%s, complaint_json=%s"),
             (complaint.id, complaint.complaintID, complaint_path,
             complaint_date, complaint.status, complaint_json,
+            complaint.tender['procurementMethod'],
+            complaint.tender['procurementMethodType'],
             complaint_date, complaint.status, complaint_json))
         self.db.commit()
