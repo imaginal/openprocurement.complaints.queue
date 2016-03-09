@@ -4,6 +4,7 @@ from iso8601 import parse_date
 from datetime import datetime
 from openprocurement_client.client import Client
 
+import socket
 import traceback
 import logging
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ class ComplaintsClient(object):
         'host_url': "https://api-sandbox.openprocurement.org",
         'api_version': '0.12',
         'params': {},
+        'timeout': 30,
         'skip_until': None,
     }
 
@@ -87,6 +89,8 @@ class ComplaintsClient(object):
 
     def process_all(self, sleep_time=1):
         while not self.should_stop:
+            if self.client_config.get('timeout', None):
+                socket.setdefaulttimeout(float(self.client_config['timeout']))
             try:
                 tenders_list = self.client.get_tenders()
             except Exception as e:

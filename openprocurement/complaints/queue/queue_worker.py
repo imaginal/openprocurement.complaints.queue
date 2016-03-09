@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+#from gevent import monkey
+#monkey.patch_all()
+
 import os
 import sys
 import fcntl
@@ -9,6 +12,7 @@ import logging.config
 
 from ConfigParser import ConfigParser, Error as ConfigParserError
 from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
+
 
 def daemonize(filename=False):
     if not filename or filename == 'no':
