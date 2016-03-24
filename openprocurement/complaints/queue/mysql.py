@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from time import sleep
 import MySQLdb
 import simplejson as json
 from openprocurement.complaints.queue.client import ComplaintsClient, logger
@@ -20,13 +21,21 @@ class ComplaintsToMySQL(ComplaintsClient):
         if mysql_config:
             self.mysql_config.update(mysql_config)
         # remove passwd before dump config to log
-        passwd = self.mysql_config.pop('passwd')
+        self.mysql_passwd = self.mysql_config.pop('passwd')
         logger.info("Connect to mysql {}".format(self.mysql_config))
         self.table_name = self.mysql_config.pop('table')
-        self.db = MySQLdb.Connect(passwd=passwd, **self.mysql_config)
-        self.cursor = self.db.cursor()
+        self.create_cursor()
         self.create_table()
         self.update_skip_until()
+
+    def create_cursor(self):
+        self.db = MySQLdb.Connect(passwd=self.mysql_passwd, **self.mysql_config)
+        self.cursor = self.db.cursor()
+
+    def handle_error(self, error):
+        super(ComplaintsToMySQL, self).handle_error(error)
+        if isinstance(error, MySQLdb.Error):
+            self.create_cursor()
 
     def execute_query(self, sql, *args):
         return self.cursor.execute(sql.format(table_name=self.table_name), *args)

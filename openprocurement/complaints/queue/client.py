@@ -2,7 +2,7 @@
 from time import sleep, time
 from iso8601 import parse_date
 from datetime import datetime
-from openprocurement_client.client import Client
+from openprocurement_client.client import TendersClient
 
 import socket
 import traceback
@@ -32,10 +32,8 @@ class ComplaintsClient(object):
     def __init__(self, client_config=None):
         if client_config:
             self.client_config.update(client_config)
-        logger.info("Create client {}".format(self.client_config))
         self.conf_skip_until = self.client_config.pop('skip_until')
-        assert(parse_date(self.conf_skip_until or '1970-01-01'))
-        self.client = Client(**self.client_config)
+        self.conf_timeout = float(self.client_config.pop('timeout'))
         self.reset_client()
 
     def test_exists(self, complaint_id, complaint_date):
@@ -89,13 +87,15 @@ class ComplaintsClient(object):
 
     def process_all(self, sleep_time=1):
         while not self.should_stop:
-            if self.client_config.get('timeout', None):
-                socket.setdefaulttimeout(float(self.client_config['timeout']))
+            if self.conf_timeout > 1e6:
+                socket.setdefaulttimeout(self.conf_timeout)
             try:
                 tenders_list = self.client.get_tenders()
             except Exception as e:
                 logger.error("Fail get_tenders {}".format(self.client_config))
+                traceback.print_exc()
                 sleep(10*sleep_time)
+                self.handle_error(e)
                 continue
 
             if not tenders_list:
@@ -112,6 +112,8 @@ class ComplaintsClient(object):
                 except Exception as e:
                     logger.error("Fail on {} error {}: {}".format(tender, type(e), e))
                     traceback.print_exc()
+                    sleep(10*sleep_time)
+                    self.handle_error(e)
 
             if sleep_time:
                 sleep(sleep_time)
@@ -122,10 +124,18 @@ class ComplaintsClient(object):
         return False
 
     def reset_client(self):
-        logger.info("Reset client params, set skip_until to %s", self.conf_skip_until)
+        logger.info("Client {} skip_until {}".format(
+            self.client_config, self.conf_skip_until))
+        self.client = TendersClient(**self.client_config)
         self.client.params.pop('offset', None)
         self.skip_until = self.conf_skip_until
         self.reset_time = time()
+        self.client_errors = 0
+
+    def handle_error(self, error):
+        self.client_errors += 1
+        if self.client_errors > 100:
+            self.reset_client()
 
     def run(self, sleep_time=10):
         while not self.should_stop:
