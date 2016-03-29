@@ -55,8 +55,8 @@ class ComplaintsToMySQL(ComplaintsClient):
     def create_table(self):
         SQL = """CREATE TABLE IF NOT EXISTS {table_name} (
                   tender_id char(32) NOT NULL,
-                  tender_status varchar(32) NOT NULL,
-                  tender_procurementMethod varchar(16) NOT NULL,
+                  tender_status varchar(64) NOT NULL,
+                  tender_procurementMethod varchar(32) NOT NULL,
                   tender_procurementMethodType varchar(32) NOT NULL,
                   complaint_id char(32) NOT NULL,
                   complaint_complaintID varchar(32) NOT NULL,
