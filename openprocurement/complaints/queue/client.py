@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from time import sleep, time
-from iso8601 import parse_date
+from munch import munchify
 from datetime import datetime
 from openprocurement_client.client import TendersClient
 
@@ -24,16 +24,16 @@ class ComplaintsClient(object):
 
     complaint_date_fields = ['dateSubmitted', 'dateAnswered',
         'dateEscalated', 'dateDecision', 'dateCanceled']
-    store_tender_fields = ['id', 'tenderID', 'title', 'procuringEntity',
-        'procurementMethod', 'procurementMethodType']
+    store_tender_fields = ['id', 'tenderID', 'title', 'status',
+        'procuringEntity', 'procurementMethod', 'procurementMethodType']
 
     should_stop = False
 
     def __init__(self, client_config=None):
         if client_config:
             self.client_config.update(client_config)
-        self.conf_skip_until = self.client_config.pop('skip_until')
-        self.conf_timeout = float(self.client_config.pop('timeout'))
+        self.conf_skip_until = self.client_config.pop('skip_until', None)
+        self.conf_timeout = float(self.client_config.pop('timeout', 0))
         self.reset_client()
 
     def test_exists(self, complaint_id, complaint_date):
@@ -53,18 +53,18 @@ class ComplaintsClient(object):
     def update_before_store(self, tender, complaint):
         if 'complaintID' not in complaint:
             complaint['complaintID'] = "{}.{}".format(tender.tenderID, complaint.id[:4])
-        complaint['tender'] = dict((k, tender.get(k)) for k in self.store_tender_fields)
+        tender_info = dict((k, tender.get(k)) for k in self.store_tender_fields)
+        complaint.tender = munchify(tender_info)
 
     def process_complaint(self, tender, complaint_path, complaint):
         complaint_date = self.complaint_date(complaint)
 
-        logger.info("Process T=%s P=%s C=%s D=%s S=%s", tender.id, complaint_path,
-            complaint.id, complaint_date, complaint.status)
+        logger.info("Process T=%s P=%s C=%s D=%s CS=%s TS=%s", tender.id, complaint_path,
+            complaint.id, complaint_date, complaint.status, complaint.tender.status)
 
         if not self.test_exists(complaint.id, complaint_date):
-            path = "{}/{}".format(tender.id, complaint_path)
             self.update_before_store(tender, complaint)
-            self.store(complaint, path, complaint_date)
+            self.store(complaint, complaint_path, complaint_date)
 
     def process_tender(self, tender):
         logger.debug("Process T=%s D=%s", tender.id, tender.dateModified)

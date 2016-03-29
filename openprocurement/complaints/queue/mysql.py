@@ -22,34 +22,48 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.mysql_config.update(mysql_config)
         # remove passwd before dump config to log
         self.mysql_passwd = self.mysql_config.pop('passwd')
-        logger.info("Connect to mysql {}".format(self.mysql_config))
         self.table_name = self.mysql_config.pop('table')
         self.create_cursor()
         self.create_table()
         self.update_skip_until()
 
     def create_cursor(self):
-        self.db = MySQLdb.Connect(passwd=self.mysql_passwd, **self.mysql_config)
-        self.cursor = self.db.cursor()
+        logger.info("Connect to mysql {} table '{}'".format(
+            self.mysql_config, self.table_name))
+        # close db handle if present
+        if getattr(self, 'dbcon', None):
+            dbcon, self.dbcon = self.dbcon, None
+            dbcon.close()
+        self.dbcon = MySQLdb.Connect(passwd=self.mysql_passwd,
+            **self.mysql_config)
+        self.cursor = self.dbcon.cursor()
 
     def handle_error(self, error):
         super(ComplaintsToMySQL, self).handle_error(error)
         if isinstance(error, MySQLdb.Error):
-            self.create_cursor()
+            self.cursor = None
+            while not self.cursor:
+                try:
+                    self.create_cursor()
+                except MySQLdb.Error as e:
+                    logger.error("Can't connect {}".format(e))
+                    sleep(10)
 
     def execute_query(self, sql, *args):
         return self.cursor.execute(sql.format(table_name=self.table_name), *args)
 
     def create_table(self):
         SQL = """CREATE TABLE IF NOT EXISTS {table_name} (
+                  tender_id char(32) NOT NULL,
+                  tender_status varchar(32) NOT NULL,
+                  tender_procurementMethod varchar(16) NOT NULL,
+                  tender_procurementMethodType varchar(32) NOT NULL,
                   complaint_id char(32) NOT NULL,
                   complaint_complaintID varchar(32) NOT NULL,
                   complaint_path varchar(96) NOT NULL,
                   complaint_date varchar(32) NOT NULL,
                   complaint_status varchar(16) NOT NULL,
                   complaint_json blob NOT NULL,
-                  tender_procurementMethod varchar(16) NOT NULL,
-                  tender_procurementMethodType varchar(32) NOT NULL,
                   PRIMARY KEY (complaint_id),
                   KEY complaint_complaintID (complaint_complaintID),
                   KEY complaint_date (complaint_date),
@@ -80,12 +94,22 @@ class ComplaintsToMySQL(ComplaintsClient):
     def store(self, complaint, complaint_path, complaint_date):
         complaint_json = json.dumps(complaint)
         self.execute_query(("INSERT INTO {table_name} "+
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "+
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "+
             "ON DUPLICATE KEY UPDATE "+
-            "complaint_date=%s, complaint_status=%s, complaint_json=%s"),
-            (complaint.id, complaint.complaintID, complaint_path,
-            complaint_date, complaint.status, complaint_json,
-            complaint.tender['procurementMethod'],
-            complaint.tender['procurementMethodType'],
-            complaint_date, complaint.status, complaint_json))
-        self.db.commit()
+            "tender_status=%s, complaint_date=%s, complaint_status=%s, complaint_json=%s"),
+           (complaint.tender.id,
+            complaint.tender.status,
+            complaint.tender.procurementMethod,
+            complaint.tender.procurementMethodType,
+            complaint.id,
+            complaint.complaintID,
+            complaint_path,
+            complaint_date,
+            complaint.status,
+            complaint_json,
+            # ON DUPLICATE KEY UPDATE
+            complaint.tender.status,
+            complaint_date,
+            complaint.status,
+            complaint_json))
+        self.dbcon.commit()
