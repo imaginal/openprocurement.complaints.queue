@@ -60,7 +60,7 @@ class ComplaintsClient(object):
         complaint_date = self.complaint_date(complaint)
 
         logger.info("Process T=%s P=%s C=%s D=%s CS=%s TS=%s", tender.id, complaint_path,
-            complaint.id, complaint_date, complaint.status, complaint.tender.status)
+            complaint.id, complaint_date, complaint.status, tender.status)
 
         if not self.test_exists(complaint.id, complaint_date):
             self.update_before_store(tender, complaint)
