@@ -55,14 +55,14 @@ class ComplaintsToMySQL(ComplaintsClient):
     def create_table(self):
         SQL = """CREATE TABLE IF NOT EXISTS {table_name} (
                   tender_id char(32) NOT NULL,
-                  tender_status varchar(64) NOT NULL,
-                  tender_procurementMethod varchar(32) NOT NULL,
-                  tender_procurementMethodType varchar(32) NOT NULL,
+                  tender_status varchar(40) NOT NULL,
+                  tender_procurementMethod varchar(40) NOT NULL,
+                  tender_procurementMethodType varchar(40) NOT NULL,
                   complaint_id char(32) NOT NULL,
-                  complaint_complaintID varchar(32) NOT NULL,
-                  complaint_path varchar(96) NOT NULL,
-                  complaint_date varchar(32) NOT NULL,
-                  complaint_status varchar(16) NOT NULL,
+                  complaint_complaintID varchar(40) NOT NULL,
+                  complaint_path varchar(80) NOT NULL,
+                  complaint_date varchar(40) NOT NULL,
+                  complaint_status varchar(40) NOT NULL,
                   complaint_json blob NOT NULL,
                   PRIMARY KEY (complaint_id),
                   KEY complaint_complaintID (complaint_complaintID),
@@ -82,7 +82,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         row = self.cursor.fetchone()
         if row and row[0]:
             row_date = row[0][:10]
-            logger.info("Update skip_until from database, set to %s", row_date)
+            logger.info("Update skip_until from database, set to '%s'", row_date)
             self.skip_until = row_date
 
     def test_exists(self, complaint_id, complaint_date):

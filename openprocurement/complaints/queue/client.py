@@ -24,7 +24,7 @@ class ComplaintsClient(object):
 
     complaint_date_fields = ['dateSubmitted', 'dateAnswered',
         'dateEscalated', 'dateDecision', 'dateCanceled']
-    store_tender_fields = ['id', 'tenderID', 'title', 'status',
+    store_tender_fields = ['id', 'tenderID', 'title', 'status', 'mode',
         'procuringEntity', 'procurementMethod', 'procurementMethodType']
 
     should_stop = False
@@ -53,13 +53,16 @@ class ComplaintsClient(object):
     def update_before_store(self, tender, complaint):
         if 'complaintID' not in complaint:
             complaint['complaintID'] = "{}.{}".format(tender.tenderID, complaint.id[:4])
-        tender_info = dict((k, tender.get(k)) for k in self.store_tender_fields)
+        tender_info = dict()
+        for k in self.store_tender_fields:
+            if k in tender:
+                tender_info[k] = tender[k]
         complaint.tender = munchify(tender_info)
 
     def process_complaint(self, tender, complaint_path, complaint):
         complaint_date = self.complaint_date(complaint)
 
-        logger.info("Process T=%s P=%s C=%s D=%s CS=%s TS=%s", tender.id, complaint_path,
+        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s TS=%s", tender.id, complaint_path,
             complaint.id, complaint_date, complaint.status, tender.status)
 
         if not self.test_exists(complaint.id, complaint_date):
@@ -67,7 +70,7 @@ class ComplaintsClient(object):
             self.store(complaint, complaint_path, complaint_date)
 
     def process_tender(self, tender):
-        logger.debug("Process T=%s D=%s", tender.id, tender.dateModified)
+        logger.debug("Tender T=%s D=%s", tender.id, tender.dateModified)
         data = self.client.get_tender(tender.id)['data']
 
         for comp in data.get('complaints', []):
@@ -124,7 +127,7 @@ class ComplaintsClient(object):
         return False
 
     def reset_client(self):
-        logger.info("Client {} skip_until {}".format(
+        logger.info("Client {} skip_until '{}'".format(
             self.client_config, self.conf_skip_until))
         self.client = TendersClient(**self.client_config)
         self.client.params.pop('offset', None)
