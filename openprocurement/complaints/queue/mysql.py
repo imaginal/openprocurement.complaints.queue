@@ -58,6 +58,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                   tender_status varchar(40) NOT NULL,
                   tender_procurementMethod varchar(40) NOT NULL,
                   tender_procurementMethodType varchar(40) NOT NULL,
+                  tender_mode varchar(40) default NULL,
                   complaint_id char(32) NOT NULL,
                   complaint_complaintID varchar(40) NOT NULL,
                   complaint_path varchar(80) NOT NULL,
@@ -94,13 +95,14 @@ class ComplaintsToMySQL(ComplaintsClient):
     def store(self, complaint, complaint_path, complaint_date):
         complaint_json = json.dumps(complaint)
         self.execute_query(("INSERT INTO {table_name} "+
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "+
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "+
             "ON DUPLICATE KEY UPDATE "+
             "tender_status=%s, complaint_date=%s, complaint_status=%s, complaint_json=%s"),
            (complaint.tender.id,
             complaint.tender.status,
             complaint.tender.procurementMethod,
             complaint.tender.procurementMethodType,
+            complaint.tender.get('mode', None), # optional
             complaint.id,
             complaint.complaintID,
             complaint_path,
