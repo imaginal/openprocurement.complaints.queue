@@ -93,7 +93,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         return row and row[0] == complaint_date
 
     def store(self, complaint, complaint_path, complaint_date):
-        complaint_json = json.dumps(complaint, ensure_ascii=False)
+        complaint_json = json.dumps(complaint)
         self.execute_query(("INSERT INTO {table_name} "+
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "+
             "ON DUPLICATE KEY UPDATE "+
