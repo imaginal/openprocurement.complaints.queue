@@ -44,6 +44,9 @@ class ComplaintsClient(object):
             complaint_path, complaint_date, complaint.status)
 
     def complaint_date(self, complaint):
+        # 2016-04-13 try return dateSubmitted else return max of complaint_date_fields
+        if complaint.get('dateSubmitted', None):
+            return complaint.dateSubmitted
         date = complaint.date
         for k in self.complaint_date_fields:
             if complaint.get(k, None) > date:

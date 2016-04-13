@@ -87,6 +87,9 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.skip_until = row_date
 
     def test_exists(self, complaint_id, complaint_date):
+        # 2016-04-13 complaint_date not updated, so always update complaint_json
+        return False
+        # the old fashioned way
         self.execute_query(("SELECT complaint_date FROM {table_name} "+
             "WHERE complaint_id=%s LIMIT 1"), (complaint_id,))
         row = self.cursor.fetchone()
