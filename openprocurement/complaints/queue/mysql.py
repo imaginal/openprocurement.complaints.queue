@@ -64,7 +64,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                   complaint_path varchar(80) NOT NULL,
                   complaint_date varchar(40) NOT NULL,
                   complaint_status varchar(40) NOT NULL,
-                  complaint_json blob NOT NULL,
+                  complaint_json longblob NOT NULL,
                   PRIMARY KEY (complaint_id),
                   KEY complaint_complaintID (complaint_complaintID),
                   KEY complaint_date (complaint_date),
