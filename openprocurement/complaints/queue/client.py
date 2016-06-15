@@ -20,6 +20,7 @@ class ComplaintsClient(object):
         'params': {},
         'timeout': 30,
         'skip_until': None,
+        'sleep': 10,
     }
 
     complaint_date_fields = ['dateSubmitted', 'dateAnswered',
@@ -34,6 +35,7 @@ class ComplaintsClient(object):
             self.client_config.update(client_config)
         self.conf_skip_until = self.client_config.pop('skip_until', None)
         self.conf_timeout = float(self.client_config.pop('timeout', 0))
+        self.conf_sleep = float(self.client_config.pop('sleep', 10))
         self.reset_client()
 
     def test_exists(self, complaint_id, complaint_date):
@@ -144,9 +146,9 @@ class ComplaintsClient(object):
         if self.client_errors > 100:
             self.reset_client()
 
-    def run(self, sleep_time=10):
+    def run(self):
         while not self.should_stop:
             if self.need_reindex():
                 self.reset_client()
             self.process_all()
-            sleep(sleep_time)
+            sleep(self.conf_sleep)
