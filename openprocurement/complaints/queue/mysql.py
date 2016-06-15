@@ -81,10 +81,15 @@ class ComplaintsToMySQL(ComplaintsClient):
     def update_skip_until(self):
         self.execute_query("SELECT MAX(complaint_date) FROM {table_name}")
         row = self.cursor.fetchone()
-        if row and row[0]:
-            row_date = row[0][:10]
-            logger.info("Update skip_until from database, set to '%s'", row_date)
-            self.skip_until = row_date
+        if not row or not row[0]:
+            return
+        row_date = row[0][:10]
+        if row_date < self.skip_until:
+            logger.info("Ignore offset from database '%s' use from config '%s'",
+                row_date, self.skip_until)
+            return
+        logger.info("Update offset from database, set to '%s'", row_date)
+        self.skip_until = row_date
 
     def test_exists(self, complaint_id, complaint_date):
         # 2016-04-13 complaint_date not updated, so always update complaint_json
