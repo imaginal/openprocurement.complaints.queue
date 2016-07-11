@@ -19,6 +19,7 @@ class ComplaintsClient(object):
         'api_version': '0.12',
         'params': {},
         'timeout': 30,
+        'store_claim': 0,
         'skip_until': None,
         'sleep': 10,
     }
@@ -34,6 +35,7 @@ class ComplaintsClient(object):
         if client_config:
             self.client_config.update(client_config)
         self.conf_skip_until = self.client_config.pop('skip_until', None)
+        self.conf_store_claim = self.client_config.pop('store_claim', '')
         self.conf_timeout = float(self.client_config.pop('timeout', 0))
         self.conf_sleep = float(self.client_config.pop('sleep', 10))
         self.reset_client()
@@ -70,7 +72,7 @@ class ComplaintsClient(object):
 
     def process_complaint(self, tender, complaint_path, complaint):
         # July 2, 2016 by Julia Dvornyk, if complaint.type == 'claim' don't store it
-        if complaint.get('type', '') == 'claim':
+        if complaint.get('type', '') == 'claim' and not self.conf_store_claim:
             logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
                 complaint_path, complaint.id, complaint.get('type', ''))
             return
