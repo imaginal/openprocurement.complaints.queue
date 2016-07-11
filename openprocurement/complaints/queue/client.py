@@ -42,8 +42,12 @@ class ComplaintsClient(object):
         return False
 
     def store(self, complaint, complaint_path, complaint_date):
-        logger.debug("Fake Store C=%s P=%s D=%s S=%s", complaint.id,
-            complaint_path, complaint_date, complaint.status)
+        logger.debug("Fake Store T=%s P=%s C=%s D=%s S=%s", complaint.tender.id,
+            complaint_path, complaint.id, complaint_date, complaint.status)
+
+    def delete(self, tender, complaint_path, complaint):
+        logger.debug("Fake Delete T=%s P=%s C=%s", complaint.tender.id,
+            complaint_path, complaint.id)
 
     def complaint_date(self, complaint):
         # 2016-04-13 try return dateSubmitted else return max of complaint_date_fields
@@ -65,11 +69,17 @@ class ComplaintsClient(object):
         complaint.tender = munchify(tender_info)
 
     def process_complaint(self, tender, complaint_path, complaint):
+        # July 2, 2016 by Julia Dvornyk, if complaint.type == 'claim' don't store it
+        if complaint.get('type', '') == 'claim':
+            logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
+                complaint_path, complaint.id, complaint.get('type', ''))
+            return
+
         complaint_date = self.complaint_date(complaint)
 
-        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s TS=%s M=%s", tender.id,
+        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s CT=%s TS=%s M=%s", tender.id,
             complaint_path, complaint.id, complaint_date, complaint.status,
-            tender.status, tender.get('mode', ''))
+            complaint.get('type', ''), tender.status, tender.get('mode', ''))
 
         if not self.test_exists(complaint.id, complaint_date):
             self.update_before_store(tender, complaint)
