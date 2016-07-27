@@ -9,6 +9,8 @@ import traceback
 import logging
 logger = logging.getLogger(__name__)
 
+CONFIG_BOOL = {'yes': True, 'no': False, 'true': True, 'false': False}
+
 
 class ComplaintsClient(object):
     """OpenProcurement Complaints client"""
@@ -16,16 +18,15 @@ class ComplaintsClient(object):
     client_config = {
         'key': '',
         'host_url': "https://api-sandbox.openprocurement.org",
-        'api_version': '0.12',
+        'api_version': '0',
         'params': {},
         'timeout': 30,
-        'store_claim': 0,
+        'store_claim': False,
+        'store_draft': False,
         'skip_until': None,
         'sleep': 10,
     }
 
-    complaint_date_fields = ['dateSubmitted', 'dateAnswered',
-        'dateEscalated', 'dateDecision', 'dateCanceled']
     store_tender_fields = ['id', 'tenderID', 'title', 'status', 'mode',
         'procuringEntity', 'procurementMethod', 'procurementMethodType']
 
@@ -35,57 +36,87 @@ class ComplaintsClient(object):
         if client_config:
             self.client_config.update(client_config)
         self.conf_skip_until = self.client_config.pop('skip_until', None)
-        self.conf_store_claim = self.client_config.pop('store_claim', '')
+        self.conf_store_claim = self.client_conf_bool('store_claim', False)
+        self.conf_store_draft = self.client_conf_bool('store_draft', False)
         self.conf_timeout = float(self.client_config.pop('timeout', 0))
         self.conf_sleep = float(self.client_config.pop('sleep', 10))
         self.reset_client()
 
-    def test_exists(self, complaint_id, complaint_date):
+    def client_conf_bool(self, name, default=False):
+        if name not in self.client_config:
+            return default
+        value = self.client_config.pop(name)
+        try:
+            return int(value)
+        except ValueError:
+            value = value.strip().lower()
+        return CONFIG_BOOL[value]
+
+    def test_exists(self, tender, complaint):
         return False
 
-    def store(self, complaint, complaint_path, complaint_date):
+    def store(self, complaint, complaint_path):
         logger.debug("Fake Store T=%s P=%s C=%s D=%s S=%s", complaint.tender.id,
-            complaint_path, complaint.id, complaint_date, complaint.status)
+            complaint_path, complaint.id, complaint.dateSubmitted, complaint.status)
 
     def delete(self, tender, complaint_path, complaint):
         logger.debug("Fake Delete T=%s P=%s C=%s", complaint.tender.id,
             complaint_path, complaint.id)
 
-    def complaint_date(self, complaint):
-        # 2016-04-13 try return dateSubmitted else return max of complaint_date_fields
-        if complaint.get('dateSubmitted', None):
-            return complaint.dateSubmitted
-        date = complaint.date
-        for k in self.complaint_date_fields:
-            if complaint.get(k, None) > date:
-                date = complaint[k]
-        return date
+    def related_lot_status(self, tender, complaint):
+        relatedLot = complaint.get('relatedLot', None)
+        if relatedLot:
+            for lot in tender.lots:
+                if lot.id == relatedLot:
+                    return lot.status
+        return None
 
-    def update_before_store(self, tender, complaint):
+    def patch_before_store(self, tender, complaint, complaint_path):
         if 'complaintID' not in complaint:
             complaint['complaintID'] = "{}.{}".format(tender.tenderID, complaint.id[:4])
         tender_info = dict()
         for k in self.store_tender_fields:
             if k in tender:
                 tender_info[k] = tender[k]
+        # July 26, 2016 by Andriy Kucherenko, patch tender.status to cancelled if
+        # ... relatedLot.status is cancelled
+        relatedLot_status = self.related_lot_status(tender, complaint)
+        if relatedLot_status == "cancelled" and tender_info['status'] != "cancelled":
+            logger.warning("Patch T=%s P=%s C=%s TS=%s by relatedLot status LS=%s",
+                tender.id, complaint_path, complaint.id, tender.status, relatedLot_status)
+            tender_info['status'] = relatedLot_status
+        # munchify result tender_info
         complaint.tender = munchify(tender_info)
 
-    def process_complaint(self, tender, complaint_path, complaint):
-        # July 2, 2016 by Julia Dvornyk, if complaint.type == 'claim' don't store it
+    def check_complaint(self, tender, complaint_path, complaint):
+        # July 2, 2016 by Julia Dvornyk, don't store complaint.type == 'claim'
         if complaint.get('type', '') == 'claim' and not self.conf_store_claim:
             logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
                 complaint_path, complaint.id, complaint.get('type', ''))
+            return False
+        # July 26, 2016 by Andriy Kucherenko, don't store complaint.status == 'draft'
+        if complaint.get('status', '') == 'draft' and not self.conf_store_draft:
+            logger.warning("Ignore T=%s P=%s C=%s by status S=%s", tender.id,
+                complaint_path, complaint.id, complaint.get('status', ''))
+            return False
+        return True
+
+    def process_complaint(self, tender, complaint_path, complaint):
+        if not self.check_complaint(tender, complaint_path, complaint):
             return
 
-        complaint_date = self.complaint_date(complaint)
+        if self.test_exists(tender, complaint):
+            logger.warning("Ignore T=%s P=%s C=%s by status TS=%s",
+                tender.id, complaint_path, complaint.id, "cancelled")
+            return
 
         logger.info("Complaint T=%s P=%s C=%s D=%s S=%s CT=%s TS=%s M=%s", tender.id,
-            complaint_path, complaint.id, complaint_date, complaint.status,
+            complaint_path, complaint.id, complaint.dateSubmitted, complaint.status,
             complaint.get('type', ''), tender.status, tender.get('mode', ''))
 
-        if not self.test_exists(complaint.id, complaint_date):
-            self.update_before_store(tender, complaint)
-            self.store(complaint, complaint_path, complaint_date)
+        self.patch_before_store(tender, complaint, complaint_path)
+        self.store(complaint, complaint_path)
+
 
     def process_tender(self, tender):
         logger.debug("Tender T=%s D=%s", tender.id, tender.dateModified)
