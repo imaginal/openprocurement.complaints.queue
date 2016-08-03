@@ -84,6 +84,7 @@ class ComplaintsClient(object):
         if relatedLot_status == "cancelled" and tender_info['status'] != "cancelled":
             logger.warning("Patch T=%s P=%s C=%s TS=%s by relatedLot status LS=%s",
                 tender.id, complaint_path, complaint.id, tender.status, relatedLot_status)
+            tender_info['tenderStatus'] = tender_info['status']
             tender_info['status'] = relatedLot_status
         # munchify result tender_info
         complaint.tender = munchify(tender_info)
@@ -110,16 +111,17 @@ class ComplaintsClient(object):
                 tender.id, complaint_path, complaint.id, "cancelled")
             return
 
-        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s CT=%s TS=%s M=%s", tender.id,
-            complaint_path, complaint.id, complaint.dateSubmitted, complaint.status,
-            complaint.get('type', ''), tender.status, tender.get('mode', ''))
+        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s CT=%s TS=%s TD=%s M=%s",
+            tender.id, complaint_path, complaint.id, complaint.dateSubmitted,
+            complaint.status, complaint.get('type', ''), tender.status,
+            tender.dateModified, tender.get('mode', ''))
 
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)
 
 
     def process_tender(self, tender):
-        logger.debug("Tender T=%s D=%s", tender.id, tender.dateModified)
+        logger.debug("Tender T=%s TD=%s", tender.id, tender.dateModified)
         data = self.client.get_tender(tender.id)['data']
 
         for comp in data.get('complaints', []):
