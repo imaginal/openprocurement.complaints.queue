@@ -113,10 +113,25 @@ class ComplaintsClient(object):
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)
 
+    def get_tender_data(self, tender_id):
+        sleep_wait = 5
+        tries_left = 5
+        tender = None
+        while not tender and tries_left:
+            tries_left -= 1
+            try:
+                tender = self.client.get_tender(tender_id)
+            except Exception as e:
+                if not tries_left:
+                    raise
+                logger.error("get_tender %s %s", tender_id, e)
+                sleep(sleep_wait)
+                sleep_wait *= 2
+        return tender['data']
 
     def process_tender(self, tender):
         logger.debug("Tender T=%s DM=%s", tender.id, tender.dateModified)
-        data = self.client.get_tender(tender.id)['data']
+        data = self.get_tender_data(tender.id)
 
         for comp in data.get('complaints', []):
             self.process_complaint(data, 'complaints', comp)
@@ -197,7 +212,7 @@ class ComplaintsClient(object):
 
     def handle_error(self, error):
         self.client_errors += 1
-        if self.client_errors > 100:
+        if self.client_errors >= 10:
             self.reset_client()
 
     def run(self):
