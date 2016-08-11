@@ -186,7 +186,7 @@ class ComplaintsClient(object):
     def reset_client(self):
         logger.info("Client {} skip_until '{}'".format(
             self.client_config, self.conf_skip_until))
-        if self.conf_timeout > 0.1:
+        if self.conf_timeout > 0.01:
             socket.setdefaulttimeout(self.conf_timeout)
         self.client = TendersClient(**self.client_config)
         self.client.params.pop('offset', None)
