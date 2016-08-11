@@ -89,7 +89,8 @@ class ComplaintsClient(object):
         # munchify result tender_info
         complaint.tender = munchify(tender_info)
 
-    def check_complaint(self, tender, complaint_path, complaint):
+    def filter_complaint(self, tender, complaint_path, complaint):
+        """return false if we should not store this complaint in queue"""
         # July 2, 2016 by Julia Dvornyk, don't store complaint.type == 'claim'
         if complaint.get('type', '') == 'claim' and not self.conf_store_claim:
             logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
@@ -100,10 +101,16 @@ class ComplaintsClient(object):
             logger.warning("Ignore T=%s P=%s C=%s by status S=%s", tender.id,
                 complaint_path, complaint.id, complaint.get('status', ''))
             return False
+        # Aug 11, 2016 by Julia Dvornyk, don't store w/o dateSubmitted
+        if not complaint.get('dateSubmitted', '') and not self.conf_store_draft:
+            logger.warning("Ignore T=%s P=%s C=%s cause dateSubmitted not set", tender.id,
+                complaint_path, complaint.id)
+            return False
+
         return True
 
     def process_complaint(self, tender, complaint_path, complaint):
-        if not self.check_complaint(tender, complaint_path, complaint):
+        if not self.filter_complaint(tender, complaint_path, complaint):
             return
 
         if self.test_exists(tender, complaint):
@@ -111,8 +118,8 @@ class ComplaintsClient(object):
                 tender.id, complaint_path, complaint.id, "cancelled")
             return
 
-        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s CT=%s TS=%s TD=%s M=%s",
-            tender.id, complaint_path, complaint.id, complaint.dateSubmitted,
+        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s CT=%s TS=%s DM=%s M=%s",
+            tender.id, complaint_path, complaint.id, complaint.get('dateSubmitted', None),
             complaint.status, complaint.get('type', ''), tender.status,
             tender.dateModified, tender.get('mode', ''))
 
@@ -121,7 +128,7 @@ class ComplaintsClient(object):
 
 
     def process_tender(self, tender):
-        logger.debug("Tender T=%s TD=%s", tender.id, tender.dateModified)
+        logger.debug("Tender T=%s DM=%s", tender.id, tender.dateModified)
         data = self.client.get_tender(tender.id)['data']
 
         for comp in data.get('complaints', []):
@@ -159,7 +166,7 @@ class ComplaintsClient(object):
                 if self.should_stop:
                     break
                 if self.skip_until and self.skip_until > tender.dateModified:
-                    logger.debug("Ignore T=%s D=%s", tender.id, tender.dateModified)
+                    logger.debug("Ignore T=%s DM=%s", tender.id, tender.dateModified)
                     continue
                 try:
                     self.process_tender(tender)
