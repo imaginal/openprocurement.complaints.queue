@@ -178,8 +178,10 @@ class ComplaintsClient(object):
 
     def reset_client(self):
         logger.info("Client {}".format(self.client_config))
+        if self.client_config['mode'] not in ['', '_all_', 'test']:
+            logger.warning("Unknown client mode '%s'", self.client_config['mode'])
         if self.client_config['feed'] not in ['changes', 'dateModified']:
-            logger.error("Unknown client feed '%s'", self.client_config['feed'])
+            logger.warning("Unknown client feed '%s'", self.client_config['feed'])
         if self.conf_timeout:
             socket.setdefaulttimeout(self.conf_timeout)
         client_options = {
