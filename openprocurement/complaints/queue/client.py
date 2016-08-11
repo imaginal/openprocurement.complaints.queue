@@ -128,8 +128,7 @@ class ComplaintsClient(object):
 
 
     def process_tender(self, tender):
-        logger.debug("Tender T=%s tID=%s DM=%s", tender.id, tender.tenderID,
-            tender.dateModified)
+        logger.debug("Tender T=%s DM=%s", tender.id, tender.dateModified)
         data = self.client.get_tender(tender.id)['data']
 
         for comp in data.get('complaints', []):
@@ -166,8 +165,7 @@ class ComplaintsClient(object):
                 if self.should_stop:
                     break
                 if self.skip_until and self.skip_until > tender.dateModified:
-                    logger.debug("Ignore T=%s tID=%s DM=%s", tender.id, tender.tenderID,
-                        tender.dateModified)
+                    logger.debug("Ignore T=%s DM=%s", tender.id, tender.dateModified)
                     continue
                 try:
                     self.process_tender(tender)
