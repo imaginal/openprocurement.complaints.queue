@@ -93,7 +93,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                 row_date, self.skip_until)
             return
         logger.info("Update offset from database, set to '%s'", row_date)
-        self.skip_until = row_date
+        self.client_skip_until(row_date)
 
     def test_exists(self, tender, complaint):
         # don't update rows in terminal status

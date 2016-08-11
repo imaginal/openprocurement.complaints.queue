@@ -2,13 +2,12 @@
 from time import sleep, time
 from munch import munchify
 from datetime import datetime
+from iso8601 import parse_date
 from openprocurement_client.client import TendersClient
 
 import socket
 import logging
 logger = logging.getLogger(__name__)
-
-CONFIG_BOOL = {'yes': True, 'no': False, 'true': True, 'false': False}
 
 
 class ComplaintsClient(object):
@@ -18,7 +17,8 @@ class ComplaintsClient(object):
         'key': '',
         'host_url': "https://api-sandbox.openprocurement.org",
         'api_version': '0',
-        'params': {},
+        'mode': '',
+        'feed': 'changes',
         'timeout': 30,
         'store_claim': False,
         'store_draft': False,
@@ -35,22 +35,9 @@ class ComplaintsClient(object):
     def __init__(self, client_config=None):
         if client_config:
             self.client_config.update(client_config)
-        self.conf_skip_until = self.client_config.pop('skip_until', None)
-        self.conf_store_claim = self.client_conf_bool('store_claim', False)
-        self.conf_store_draft = self.client_conf_bool('store_draft', False)
-        self.conf_timeout = float(self.client_config.pop('timeout', 0))
-        self.conf_sleep = float(self.client_config.pop('sleep', 10))
+        self.conf_timeout = float(self.client_config['timeout'] or 30)
+        self.conf_sleep = float(self.client_config['sleep'] or 10)
         self.reset_client()
-
-    def client_conf_bool(self, name, default=False):
-        if name not in self.client_config:
-            return default
-        value = self.client_config.pop(name)
-        try:
-            return int(value)
-        except ValueError:
-            value = value.strip().lower()
-        return CONFIG_BOOL[value]
 
     def test_exists(self, tender, complaint):
         return False
@@ -82,9 +69,8 @@ class ComplaintsClient(object):
         # ... relatedLot.status is cancelled
         relatedLot_status = self.related_lot_status(tender, complaint)
         if relatedLot_status == "cancelled" and tender_info['status'] != "cancelled":
-            logger.warning("Patch T=%s tID=%s P=%s C=%s TS=%s by relatedLot status LS=%s",
-                tender.id, tender.tenderID, complaint_path, complaint.id, tender.status,
-                relatedLot_status)
+            logger.warning("Patch T=%s P=%s C=%s TS=%s by relatedLot status LS=%s",
+                tender.id, complaint_path, complaint.id, tender.status, relatedLot_status)
             tender_info['tenderStatus'] = tender_info['status']
             tender_info['status'] = relatedLot_status
         # munchify result tender_info
@@ -93,19 +79,19 @@ class ComplaintsClient(object):
     def filter_complaint(self, tender, complaint_path, complaint):
         """return false if we should not store this complaint in queue"""
         # July 2, 2016 by Julia Dvornyk, don't store complaint.type == 'claim'
-        if complaint.get('type', '') == 'claim' and not self.conf_store_claim:
-            logger.warning("Ignore T=%s tID=%s P=%s C=%s by type CT=%s", tender.id,
-                tender.tenderID, complaint_path, complaint.id, complaint.get('type', ''))
+        if complaint.get('type', '') == 'claim' and not self.client_config['store_claim']:
+            logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
+                complaint_path, complaint.id, complaint.get('type', ''))
             return False
         # July 26, 2016 by Andriy Kucherenko, don't store complaint.status == 'draft'
-        if complaint.get('status', '') == 'draft' and not self.conf_store_draft:
-            logger.warning("Ignore T=%s tID=%s P=%s C=%s by status S=%s", tender.id,
-                tender.tenderID, complaint_path, complaint.id, complaint.get('status', ''))
+        if complaint.get('status', '') == 'draft' and not self.client_config['store_draft']:
+            logger.warning("Ignore T=%s P=%s C=%s by status S=%s", tender.id,
+                complaint_path, complaint.id, complaint.get('status', ''))
             return False
         # Aug 11, 2016 by Julia Dvornyk, don't store w/o dateSubmitted
-        if not complaint.get('dateSubmitted', '') and not self.conf_store_draft:
-            logger.warning("Ignore T=%s tID=%s P=%s C=%s cause dateSubmitted not set",
-                tender.id, tender.tenderID, complaint_path, complaint.id)
+        if not complaint.get('dateSubmitted', ''):
+            logger.warning("Ignore T=%s P=%s C=%s cause dateSubmitted not set",
+                tender.id, complaint_path, complaint.id)
             return False
 
         return True
@@ -115,14 +101,14 @@ class ComplaintsClient(object):
             return
 
         if self.test_exists(tender, complaint):
-            logger.warning("Ignore T=%s tID=%s P=%s C=%s by status TS=%s",
-                tender.id, tender.tenderID, complaint_path, complaint.id, "cancelled")
+            logger.warning("Ignore T=%s P=%s C=%s by status TS=%s",
+                tender.id, complaint_path, complaint.id, "cancelled")
             return
 
-        logger.info("Complaint T=%s tID=%s P=%s C=%s DS=%s S=%s CT=%s TS=%s DM=%s M=%s",
-            tender.id, tender.tenderID, complaint_path, complaint.id, complaint.dateSubmitted,
-            complaint.status, complaint.get('type', ''), tender.status, tender.dateModified,
-            tender.get('mode', ''))
+        logger.info("Complaint T=%s P=%s C=%s DS=%s S=%s CT=%s TS=%s DM=%s M=%s",
+            tender.id, complaint_path, complaint.id, complaint.dateSubmitted,
+            complaint.status, complaint.get('type', ''), tender.status,
+            tender.dateModified, tender.get('mode', ''))
 
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)
@@ -152,9 +138,10 @@ class ComplaintsClient(object):
             if self.watchdog:
                 self.watchdog.counter = 0
             try:
-                tenders_list = self.client.get_tenders()
+                feed = self.client_config['feed'] or 'changes'
+                tenders_list = self.client.get_tenders(feed=feed)
             except Exception as e:
-                logger.exception("Fail get_tenders {}".format(self.client_config))
+                logger.exception("Fail get_tenders")
                 sleep(10*sleep_time)
                 self.handle_error(e)
                 continue
@@ -180,17 +167,29 @@ class ComplaintsClient(object):
 
     def need_reindex(self):
         if time() - self.reset_time > 20*3600:
-            return datetime.now().hour <= 6
+            return datetime.now().hour < 2
         return False
 
+    def client_skip_until(self, skip_until=None):
+        self.skip_until = skip_until or self.client_config['skip_until']
+        if (self.client_config['feed'] == 'dateModified' and
+                self.skip_until and parse_date(self.skip_until)):
+            self.client.params['offset'] = self.skip_until
+
     def reset_client(self):
-        logger.info("Client {} skip_until '{}'".format(
-            self.client_config, self.conf_skip_until))
-        if self.conf_timeout > 0.01:
+        logger.info("Client {}".format(self.client_config))
+        if self.client_config['feed'] not in ['changes', 'dateModified']:
+            logger.error("Unknown client feed '%s'", self.client_config['feed'])
+        if self.conf_timeout:
             socket.setdefaulttimeout(self.conf_timeout)
-        self.client = TendersClient(**self.client_config)
-        self.client.params.pop('offset', None)
-        self.skip_until = self.conf_skip_until
+        client_options = {
+            'key': self.client_config['key'],
+            'host_url': self.client_config['host_url'],
+            'api_version': self.client_config['api_version'],
+            'params': {'mode': self.client_config['mode']},
+        }
+        self.client = TendersClient(**client_options)
+        self.client_skip_until()
         self.reset_time = time()
         self.client_errors = 0
 
