@@ -14,6 +14,29 @@ from ConfigParser import ConfigParser, Error as ConfigParserError
 from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
 
 
+class Watchdog:
+    class TimeoutError(Exception):
+        pass
+    counter = 0
+    timeout = 0
+
+
+def sigalrm_handler(signo, frame):
+    if Watchdog.timeout:
+        signal.alarm(Watchdog.timeout)
+    if Watchdog.counter > 0:
+        raise Watchdog.TimeoutError()
+    Watchdog.counter += 1
+    print "Watchdog.counter", Watchdog.counter
+
+
+def sigalrm(timeout=None):
+    if timeout and timeout != '0':
+        signal.signal(signal.SIGALRM, sigalrm_handler)
+        Watchdog.timeout = int(timeout)
+        signal.alarm(Watchdog.timeout)
+
+
 def daemonize(filename=False):
     if not filename or filename == 'no':
         return
@@ -51,7 +74,7 @@ def pidfile(filename):
     return lock_file
 
 
-def signal_handler(signo, frame):
+def sigterm_handler(signo, frame):
     sys.exit(0)
 
 
@@ -74,15 +97,17 @@ def main():
     parser = MyConfigParser(allow_no_value=True)
     parser.read(sys.argv[1])
 
-    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGTERM, sigterm_handler)
 
     daemonize(parser.get('general', 'daemonize'))
     pidfile(parser.get('general', 'pidfile'))
+    sigalrm(parser.get('general', 'sigalrm'))
 
     client_config = parser.items('client')
     mysql_config = parser.items('mysql')
 
     app = ComplaintsToMySQL(client_config, mysql_config)
+    app.watchdog = Watchdog
     app.run()
 
 

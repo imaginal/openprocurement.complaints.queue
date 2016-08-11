@@ -30,6 +30,7 @@ class ComplaintsClient(object):
         'procuringEntity', 'procurementMethod', 'procurementMethodType']
 
     should_stop = False
+    watchdog = None
 
     def __init__(self, client_config=None):
         if client_config:
@@ -147,7 +148,9 @@ class ComplaintsClient(object):
                     self.process_complaint(data, path, comp)
 
     def process_all(self, sleep_time=1):
-        while not self.should_stop:
+        while True:
+            if self.watchdog:
+                self.watchdog.counter = 0
             if self.conf_timeout > 1e6:
                 socket.setdefaulttimeout(self.conf_timeout)
             try:
@@ -162,8 +165,8 @@ class ComplaintsClient(object):
                 break
 
             for tender in tenders_list:
-                if self.should_stop:
-                    break
+                if self.watchdog:
+                    self.watchdog.counter = 0
                 if self.skip_until and self.skip_until > tender.dateModified:
                     logger.debug("Ignore T=%s DM=%s", tender.id, tender.dateModified)
                     continue
