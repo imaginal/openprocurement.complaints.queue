@@ -151,8 +151,6 @@ class ComplaintsClient(object):
         while True:
             if self.watchdog:
                 self.watchdog.counter = 0
-            if self.conf_timeout > 1e6:
-                socket.setdefaulttimeout(self.conf_timeout)
             try:
                 tenders_list = self.client.get_tenders()
             except Exception as e:
@@ -188,6 +186,8 @@ class ComplaintsClient(object):
     def reset_client(self):
         logger.info("Client {} skip_until '{}'".format(
             self.client_config, self.conf_skip_until))
+        if self.conf_timeout > 0.1:
+            socket.setdefaulttimeout(self.conf_timeout)
         self.client = TendersClient(**self.client_config)
         self.client.params.pop('offset', None)
         self.skip_until = self.conf_skip_until
