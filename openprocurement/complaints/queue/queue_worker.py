@@ -27,7 +27,6 @@ def sigalrm_handler(signo, frame):
     if Watchdog.counter > 0:
         raise Watchdog.TimeoutError()
     Watchdog.counter += 1
-    print "Watchdog.counter", Watchdog.counter
 
 
 def sigalrm(timeout=None):
