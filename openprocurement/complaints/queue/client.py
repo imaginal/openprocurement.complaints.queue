@@ -5,7 +5,6 @@ from datetime import datetime
 from openprocurement_client.client import TendersClient
 
 import socket
-import traceback
 import logging
 logger = logging.getLogger(__name__)
 
@@ -56,8 +55,8 @@ class ComplaintsClient(object):
         return False
 
     def store(self, complaint, complaint_path):
-        logger.debug("Fake Store T=%s P=%s C=%s D=%s S=%s", complaint.tender.id,
-            complaint_path, complaint.id, complaint.dateSubmitted, complaint.status)
+        logger.debug("Fake Store T=%s P=%s C=%s", complaint.tender.id,
+            complaint_path, complaint.id)
 
     def delete(self, tender, complaint_path, complaint):
         logger.debug("Fake Delete T=%s P=%s C=%s", complaint.tender.id,
@@ -82,8 +81,9 @@ class ComplaintsClient(object):
         # ... relatedLot.status is cancelled
         relatedLot_status = self.related_lot_status(tender, complaint)
         if relatedLot_status == "cancelled" and tender_info['status'] != "cancelled":
-            logger.warning("Patch T=%s P=%s C=%s TS=%s by relatedLot status LS=%s",
-                tender.id, complaint_path, complaint.id, tender.status, relatedLot_status)
+            logger.warning("Patch T=%s tID=%s P=%s C=%s TS=%s by relatedLot status LS=%s",
+                tender.id, tender.tenderID, complaint_path, complaint.id, tender.status,
+                relatedLot_status)
             tender_info['tenderStatus'] = tender_info['status']
             tender_info['status'] = relatedLot_status
         # munchify result tender_info
@@ -93,18 +93,18 @@ class ComplaintsClient(object):
         """return false if we should not store this complaint in queue"""
         # July 2, 2016 by Julia Dvornyk, don't store complaint.type == 'claim'
         if complaint.get('type', '') == 'claim' and not self.conf_store_claim:
-            logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
-                complaint_path, complaint.id, complaint.get('type', ''))
+            logger.warning("Ignore T=%s tID=%s P=%s C=%s by type CT=%s", tender.id,
+                tender.tenderID, complaint_path, complaint.id, complaint.get('type', ''))
             return False
         # July 26, 2016 by Andriy Kucherenko, don't store complaint.status == 'draft'
         if complaint.get('status', '') == 'draft' and not self.conf_store_draft:
-            logger.warning("Ignore T=%s P=%s C=%s by status S=%s", tender.id,
-                complaint_path, complaint.id, complaint.get('status', ''))
+            logger.warning("Ignore T=%s tID=%s P=%s C=%s by status S=%s", tender.id,
+                tender.tenderID, complaint_path, complaint.id, complaint.get('status', ''))
             return False
         # Aug 11, 2016 by Julia Dvornyk, don't store w/o dateSubmitted
         if not complaint.get('dateSubmitted', '') and not self.conf_store_draft:
-            logger.warning("Ignore T=%s P=%s C=%s cause dateSubmitted not set", tender.id,
-                complaint_path, complaint.id)
+            logger.warning("Ignore T=%s tID=%s P=%s C=%s cause dateSubmitted not set",
+                tender.id, tender.tenderID, complaint_path, complaint.id)
             return False
 
         return True
@@ -114,21 +114,22 @@ class ComplaintsClient(object):
             return
 
         if self.test_exists(tender, complaint):
-            logger.warning("Ignore T=%s P=%s C=%s by status TS=%s",
-                tender.id, complaint_path, complaint.id, "cancelled")
+            logger.warning("Ignore T=%s tID=%s P=%s C=%s by status TS=%s",
+                tender.id, tender.tenderID, complaint_path, complaint.id, "cancelled")
             return
 
-        logger.info("Complaint T=%s P=%s C=%s D=%s S=%s CT=%s TS=%s DM=%s M=%s",
-            tender.id, complaint_path, complaint.id, complaint.get('dateSubmitted', None),
-            complaint.status, complaint.get('type', ''), tender.status,
-            tender.dateModified, tender.get('mode', ''))
+        logger.info("Complaint T=%s tID=%s P=%s C=%s DS=%s S=%s CT=%s TS=%s DM=%s M=%s",
+            tender.id, tender.tenderID, complaint_path, complaint.id, complaint.dateSubmitted,
+            complaint.status, complaint.get('type', ''), tender.status, tender.dateModified,
+            tender.get('mode', ''))
 
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)
 
 
     def process_tender(self, tender):
-        logger.debug("Tender T=%s DM=%s", tender.id, tender.dateModified)
+        logger.debug("Tender T=%s tID=%s DM=%s", tender.id, tender.tenderID,
+            tender.dateModified)
         data = self.client.get_tender(tender.id)['data']
 
         for comp in data.get('complaints', []):
@@ -153,8 +154,7 @@ class ComplaintsClient(object):
             try:
                 tenders_list = self.client.get_tenders()
             except Exception as e:
-                logger.error("Fail get_tenders {}".format(self.client_config))
-                traceback.print_exc()
+                logger.exception("Fail get_tenders {}".format(self.client_config))
                 sleep(10*sleep_time)
                 self.handle_error(e)
                 continue
@@ -166,13 +166,13 @@ class ComplaintsClient(object):
                 if self.should_stop:
                     break
                 if self.skip_until and self.skip_until > tender.dateModified:
-                    logger.debug("Ignore T=%s DM=%s", tender.id, tender.dateModified)
+                    logger.debug("Ignore T=%s tID=%s DM=%s", tender.id, tender.tenderID,
+                        tender.dateModified)
                     continue
                 try:
                     self.process_tender(tender)
                 except Exception as e:
-                    logger.error("Fail on {} error {}: {}".format(tender, type(e), e))
-                    traceback.print_exc()
+                    logger.exception("Fail on {} error {}: {}".format(tender, type(e), e))
                     sleep(10*sleep_time)
                     self.handle_error(e)
 
