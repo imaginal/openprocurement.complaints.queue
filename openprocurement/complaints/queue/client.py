@@ -105,10 +105,9 @@ class ComplaintsClient(object):
                 tender.id, complaint_path, complaint.id, "cancelled")
             return
 
-        logger.info("Complaint T=%s P=%s C=%s DS=%s S=%s CT=%s TS=%s DM=%s M=%s",
-            tender.id, complaint_path, complaint.id, complaint.dateSubmitted,
-            complaint.status, complaint.get('type', ''), tender.status,
-            tender.dateModified, tender.get('mode', ''))
+        logger.info("Complaint T=%s P=%s C=%s DS=%s S=%s TS=%s DM=%s M=%s",
+            tender.id, complaint_path, complaint.id, complaint.get('dateSubmitted'),
+            complaint.status, tender.status, tender.dateModified, tender.get('mode', ''))
 
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)

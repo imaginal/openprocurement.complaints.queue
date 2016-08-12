@@ -104,6 +104,9 @@ class ComplaintsToMySQL(ComplaintsClient):
 
     def store(self, complaint, complaint_path):
         complaint_json = json.dumps(complaint)
+        if len(complaint_json) > 65000:
+            logger.warning("Too big T=%s P=%s C=%s size=%d", complaint.tender.id,
+                complaint_path, complaint.id, len(complaint_json))
         insert_data = [
             ('tender_id', complaint.tender.id),
             ('tender_status', complaint.tender.status),
