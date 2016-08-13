@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from time import sleep, time
 from munch import munchify
+from retrying import retry
 from datetime import datetime
 from iso8601 import parse_date
 from openprocurement_client.client import TendersClient
@@ -112,20 +113,9 @@ class ComplaintsClient(object):
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)
 
+    @retry(stop_max_attempt_number=5, wait_fixed=5000)
     def get_tender_data(self, tender_id):
-        sleep_wait = 5
-        tries_left = 5
-        tender = None
-        while not tender and tries_left:
-            tries_left -= 1
-            try:
-                tender = self.client.get_tender(tender_id)
-            except Exception as e:
-                if not tries_left:
-                    raise
-                logger.error("get_tender %s %s", tender_id, e)
-                sleep(sleep_wait)
-                sleep_wait *= 2
+        tender = self.client.get_tender(tender_id)
         return tender['data']
 
     def process_tender(self, tender):
@@ -180,7 +170,7 @@ class ComplaintsClient(object):
                 sleep(sleep_time)
 
     def need_reindex(self):
-        if time() - self.reset_time > 20*3600:
+        if time() - self.reset_time > 7200:
             return datetime.now().hour < 2
         return False
 
