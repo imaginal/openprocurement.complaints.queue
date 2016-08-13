@@ -91,7 +91,7 @@ class ComplaintsClient(object):
             return False
         # Aug 11, 2016 by Julia Dvornyk, don't store w/o dateSubmitted
         if not complaint.get('dateSubmitted', ''):
-            logger.warning("Ignore T=%s P=%s C=%s cause dateSubmitted not set",
+            logger.warning("Ignore T=%s P=%s C=%s dateSubmitted not set",
                 tender.id, complaint_path, complaint.id)
             return False
 
