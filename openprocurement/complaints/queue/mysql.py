@@ -93,8 +93,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         SQL = """CREATE TABLE IF NOT EXISTS {table_name}_tenders (
                   tender_id char(32) NOT NULL,
                   tender_dateModified varchar(40) NOT NULL,
-                  PRIMARY KEY (tender_id),
-                  KEY tender_dateModified (tender_dateModified)
+                  PRIMARY KEY (tender_id)
                 ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             """
         try:
