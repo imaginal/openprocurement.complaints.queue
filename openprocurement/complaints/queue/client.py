@@ -11,6 +11,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def foce_bool(value):
+    bool_dict = {'y': 1, 'n': 0, 'yes': 1, 'no': 0,
+        'on': 1, 'off': 0, 'true': 1, 'false': 0}
+    try:
+        return int(value or 0)
+    except:
+        pass
+    return bool_dict[value.strip().lower()]
+
+
 class ComplaintsClient(object):
     """OpenProcurement Complaints client"""
 
@@ -21,6 +31,7 @@ class ComplaintsClient(object):
         'mode': '',
         'feed': 'changes',
         'timeout': 30,
+        'use_cache': False,
         'store_claim': False,
         'store_draft': False,
         'skip_until': None,
@@ -28,7 +39,8 @@ class ComplaintsClient(object):
     }
 
     store_tender_fields = ['id', 'tenderID', 'title', 'status', 'mode',
-        'procuringEntity', 'procurementMethod', 'procurementMethodType']
+        'procuringEntity', 'procurementMethod', 'procurementMethodType',
+        'dateModified']
 
     should_stop = False
     watchdog = None
@@ -38,9 +50,17 @@ class ComplaintsClient(object):
             self.client_config.update(client_config)
         self.conf_timeout = float(self.client_config['timeout'] or 30)
         self.conf_sleep = float(self.client_config['sleep'] or 10)
+        for k in ['use_cache', 'store_claim', 'store_draft']:
+            self.client_config[k] = foce_bool(self.client_config.get(k))
         self.reset_client()
 
-    def test_exists(self, tender, complaint):
+    def clear_cache(self):
+        logger.debug("Fake clear cache")
+
+    def check_tender_exists(self, tender):
+        return False
+
+    def check_exists(self, tender, complaint_path, complaint):
         return False
 
     def store(self, complaint, complaint_path):
@@ -50,6 +70,9 @@ class ComplaintsClient(object):
     def delete(self, tender, complaint_path, complaint):
         logger.debug("Fake Delete T=%s P=%s C=%s", complaint.tender.id,
             complaint_path, complaint.id)
+
+    def finish_tender(self, tender):
+        logger.debug("Finish tender T=%s DM=%s", tender.id, tender.dateModified)
 
     def related_lot_status(self, tender, complaint):
         relatedLot = complaint.get('relatedLot', None)
@@ -77,37 +100,35 @@ class ComplaintsClient(object):
         # munchify result tender_info
         complaint.tender = munchify(tender_info)
 
-    def filter_complaint(self, tender, complaint_path, complaint):
-        """return false if we should not store this complaint in queue"""
+    def check_nostore(self, tender, complaint_path, complaint):
+        """return True if we should not store this complaint in queue"""
         # July 2, 2016 by Julia Dvornyk, don't store complaint.type == 'claim'
         if complaint.get('type', '') == 'claim' and not self.client_config['store_claim']:
             logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
                 complaint_path, complaint.id, complaint.get('type', ''))
-            return False
+            return True
         # July 26, 2016 by Andriy Kucherenko, don't store complaint.status == 'draft'
         if complaint.get('status', '') == 'draft' and not self.client_config['store_draft']:
             logger.warning("Ignore T=%s P=%s C=%s by status S=%s", tender.id,
                 complaint_path, complaint.id, complaint.get('status', ''))
-            return False
+            return True
         # Aug 11, 2016 by Julia Dvornyk, don't store w/o dateSubmitted
         if not complaint.get('dateSubmitted', ''):
             logger.warning("Ignore T=%s P=%s C=%s dateSubmitted not set",
                 tender.id, complaint_path, complaint.id)
-            return False
+            return True
 
-        return True
+        return False
 
     def process_complaint(self, tender, complaint_path, complaint):
-        if not self.filter_complaint(tender, complaint_path, complaint):
+        if self.check_nostore(tender, complaint_path, complaint):
             return
 
-        if self.test_exists(tender, complaint):
-            logger.warning("Ignore T=%s P=%s C=%s by status TS=%s",
-                tender.id, complaint_path, complaint.id, "cancelled")
+        if self.check_exists(tender, complaint_path, complaint):
             return
 
         logger.info("Complaint T=%s P=%s C=%s DS=%s S=%s TS=%s DM=%s M=%s",
-            tender.id, complaint_path, complaint.id, complaint.get('dateSubmitted'),
+            tender.id, complaint_path, complaint.id, complaint.get('dateSubmitted', ''),
             complaint.status, tender.status, tender.dateModified, tender.get('mode', ''))
 
         self.patch_before_store(tender, complaint, complaint_path)
@@ -119,6 +140,10 @@ class ComplaintsClient(object):
         return tender['data']
 
     def process_tender(self, tender):
+        if self.client_config['use_cache'] and self.check_tender_exists(tender):
+            logger.debug("Exists T=%s DM=%s", tender.id, tender.dateModified)
+            return
+
         logger.debug("Tender T=%s DM=%s", tender.id, tender.dateModified)
         data = self.get_tender_data(tender.id)
 
@@ -136,6 +161,8 @@ class ComplaintsClient(object):
                 path = "qualifications/{}/complaints".format(qual.id)
                 for comp in qual.complaints:
                     self.process_complaint(data, path, comp)
+
+        self.finish_tender(data)
 
     def process_all(self, sleep_time=1):
         while True:
@@ -203,10 +230,12 @@ class ComplaintsClient(object):
         self.client_errors += 1
         if self.client_errors >= 10:
             self.reset_client()
+            self.clear_cache()
 
     def run(self):
         while not self.should_stop:
             if self.need_reindex():
                 self.reset_client()
+                self.clear_cache()
             self.process_all()
             sleep(self.conf_sleep)

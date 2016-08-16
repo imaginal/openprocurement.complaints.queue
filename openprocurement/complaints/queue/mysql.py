@@ -49,7 +49,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                     logger.error("Can't connect {}".format(e))
                     sleep(10)
 
-    def execute_query(self, sql, *args):
+    def execute_query(self, sql, *args, **kwargs):
         return self.cursor.execute(sql.format(table_name=self.table_name), *args)
 
     def create_table(self):
@@ -58,6 +58,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                   tender_status varchar(40) NOT NULL,
                   tender_procurementMethod varchar(40) NOT NULL,
                   tender_procurementMethodType varchar(40) NOT NULL,
+                  tender_dateModified varchar(40) NOT NULL,
                   tender_mode varchar(40) default NULL,
                   complaint_id char(32) NOT NULL,
                   complaint_complaintID varchar(40) NOT NULL,
@@ -78,9 +79,35 @@ class ComplaintsToMySQL(ComplaintsClient):
             """
         try:
             self.execute_query("SELECT 1 FROM {table_name} LIMIT 1")
+            clear_cache = False
         except MySQLdb.Error:
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
+            self.dbcon.commit()
+            clear_cache = True
+        # clear cache table
+        if clear_cache:
+            self.execute_query("DROP TABLE IF EXISTS {table_name}_tenders")
+            self.dbcon.commit()
+        # create tenders cache
+        SQL = """CREATE TABLE IF NOT EXISTS {table_name}_tenders (
+                  tender_id char(32) NOT NULL,
+                  tender_dateModified varchar(40) NOT NULL,
+                  PRIMARY KEY (tender_id),
+                  KEY tender_dateModified (tender_dateModified),
+                ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+            """
+        try:
+            self.execute_query("SELECT 1 FROM {table_name}_tenders LIMIT 1")
+        except MySQLdb.Error:
+            logger.warning("Create table '%s_tenders'", self.table_name)
+            self.execute_query(SQL)
+            self.dbcon.commit()
+
+    def clear_cache(self):
+        logger.warning("Clear cache table '%s_tenders'", self.table_name)
+        self.execute_query("TRUNCATE TABLE {table_name}_tenders")
+        self.dbcon.commit()
 
     def update_skip_until(self):
         self.execute_query("SELECT MAX(complaint_dateSubmitted) FROM {table_name}")
@@ -95,12 +122,33 @@ class ComplaintsToMySQL(ComplaintsClient):
         logger.info("Update offset from database, set to '%s'", row_date)
         self.client_skip_until(row_date)
 
-    def test_exists(self, tender, complaint):
-        # don't update rows in terminal status
-        self.execute_query(("SELECT tender_status FROM {table_name} "+
-            "WHERE complaint_id=%s LIMIT 1"), (complaint.id, ))
+    def check_tender_exists(self, tender):
+        self.execute_query(("SELECT tender_dateModified FROM {table_name}_tenders "+
+            "WHERE tender_id=%s LIMIT 1"), (tender.id,))
         row = self.cursor.fetchone()
-        return row and row[0] == "cancelled"
+        return row and row[0] == tender.dateModified
+
+    def finish_tender(self, tender):
+        SQL = ("INSERT INTO {table_name}_tenders (tender_id, tender_dateModified) "+
+                "VALUES (%s, %s) ON DUPLICATE KEY UPDATE tender_dateModified=%s")
+        #logger.debug(SQL)
+        self.execute_query(SQL, (tender.id, tender.dateModified, tender.dateModified))
+        self.dbcon.commit()
+
+    def check_exists(self, tender, complaint_path, complaint):
+        self.execute_query(("SELECT tender_status, tender_dateModified "+
+            "FROM {table_name} WHERE complaint_id=%s LIMIT 1"), (complaint.id,))
+        row = self.cursor.fetchone()
+        # don't update rows in terminal status
+        if row and row[0] == "cancelled":
+            logger.warning("Exists T=%s P=%s C=%s by TS=cancelled",
+                tender.id, complaint_path, complaint.id)
+            return True
+        if row and row[1] == tender.dateModified:
+            logger.warning("Exists T=%s P=%s C=%s by dateModified",
+                tender.id, complaint_path, complaint.id)
+            return True
+        return False
 
     def store(self, complaint, complaint_path):
         complaint_json = json.dumps(complaint)
@@ -112,6 +160,7 @@ class ComplaintsToMySQL(ComplaintsClient):
             ('tender_status', complaint.tender.status),
             ('tender_procurementMethod', complaint.tender.procurementMethod),
             ('tender_procurementMethodType', complaint.tender.procurementMethodType),
+            ('tender_dateModified', complaint.tender.dateModified),
             ('tender_mode', complaint.tender.get('mode', None)),
             ('complaint_id', complaint.id),
             ('complaint_complaintID', complaint.complaintID),
@@ -124,6 +173,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         ]
         update_data = [
             ('tender_status', complaint.tender.status),
+            ('tender_dateModified', complaint.tender.dateModified),
             ('complaint_status', complaint.status),
             ('complaint_acceptance', complaint.get('acceptance', None)),
             ('complaint_dateAccepted', complaint.get('dateAccepted', None)),
