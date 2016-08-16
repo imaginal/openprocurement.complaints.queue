@@ -162,7 +162,8 @@ class ComplaintsClient(object):
                 for comp in qual.complaints:
                     self.process_complaint(data, path, comp)
 
-        self.finish_tender(data)
+        if self.client_config['use_cache']:
+            self.finish_tender(data)
 
     def process_all(self, sleep_time=1):
         while True:
