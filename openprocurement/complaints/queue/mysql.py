@@ -94,7 +94,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                   tender_id char(32) NOT NULL,
                   tender_dateModified varchar(40) NOT NULL,
                   PRIMARY KEY (tender_id),
-                  KEY tender_dateModified (tender_dateModified),
+                  KEY tender_dateModified (tender_dateModified)
                 ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             """
         try:
