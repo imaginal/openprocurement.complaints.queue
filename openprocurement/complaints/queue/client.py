@@ -231,7 +231,6 @@ class ComplaintsClient(object):
         self.client_errors += 1
         if self.client_errors >= 10:
             self.reset_client()
-            self.clear_cache()
 
     def run(self):
         while not self.should_stop:
