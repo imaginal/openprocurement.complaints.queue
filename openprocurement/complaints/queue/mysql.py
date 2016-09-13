@@ -140,11 +140,11 @@ class ComplaintsToMySQL(ComplaintsClient):
         row = self.cursor.fetchone()
         # don't update rows in terminal status
         if row and row[0] == "cancelled":
-            logger.warning("Exists T=%s P=%s C=%s by TS=cancelled",
+            logger.info("Exists T=%s P=%s C=%s by TS=cancelled",
                 tender.id, complaint_path, complaint.id)
             return True
         if row and row[1] == tender.dateModified:
-            logger.warning("Exists T=%s P=%s C=%s by dateModified",
+            logger.info("Exists T=%s P=%s C=%s by dateModified",
                 tender.id, complaint_path, complaint.id)
             return True
         return False
