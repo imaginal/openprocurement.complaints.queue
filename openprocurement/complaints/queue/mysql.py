@@ -122,20 +122,20 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.client_skip_until(row_date)
 
     def check_tender_exists(self, tender):
-        self.execute_query(("SELECT tender_dateModified FROM {table_name}_tenders "+
+        self.execute_query(("SELECT tender_dateModified FROM {table_name}_tenders " +
             "WHERE tender_id=%s LIMIT 1"), (tender.id,))
         row = self.cursor.fetchone()
         return row and row[0] == tender.dateModified
 
     def finish_tender(self, tender):
-        SQL = ("INSERT INTO {table_name}_tenders (tender_id, tender_dateModified) "+
-                "VALUES (%s, %s) ON DUPLICATE KEY UPDATE tender_dateModified=%s")
-        #logger.debug(SQL)
+        SQL = ("INSERT INTO {table_name}_tenders (tender_id, tender_dateModified) " +
+               "VALUES (%s, %s) ON DUPLICATE KEY UPDATE tender_dateModified=%s")
+        # logger.debug(SQL)
         self.execute_query(SQL, (tender.id, tender.dateModified, tender.dateModified))
         self.dbcon.commit()
 
     def check_exists(self, tender, complaint_path, complaint):
-        self.execute_query(("SELECT tender_status, tender_dateModified "+
+        self.execute_query(("SELECT tender_status, tender_dateModified " +
             "FROM {table_name} WHERE complaint_id=%s LIMIT 1"), (complaint.id,))
         row = self.cursor.fetchone()
         # don't update rows in terminal status

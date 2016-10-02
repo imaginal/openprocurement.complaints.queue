@@ -2,8 +2,8 @@
 from time import sleep, time
 from munch import munchify
 from retrying import retry
-from datetime import datetime
 from iso8601 import parse_date
+from datetime import datetime, timedelta
 from openprocurement_client.client import TendersClient
 
 import socket
@@ -30,10 +30,12 @@ class ComplaintsClient(object):
         'api_version': '0',
         'mode': '',
         'feed': 'changes',
+        'limit': 1000,
         'timeout': 30,
         'use_cache': False,
         'store_claim': False,
         'store_draft': False,
+        'allow_rewind': False,
         'skip_until': None,
         'sleep': 10,
     }
@@ -174,7 +176,7 @@ class ComplaintsClient(object):
                 tenders_list = self.client.get_tenders(feed=feed)
             except Exception as e:
                 logger.exception("Fail get_tenders")
-                sleep(10*sleep_time)
+                sleep(10 * sleep_time)
                 self.handle_error(e)
                 continue
 
@@ -191,22 +193,54 @@ class ComplaintsClient(object):
                     self.process_tender(tender)
                 except Exception as e:
                     logger.exception("Fail on {} error {}: {}".format(tender, type(e), e))
-                    sleep(10*sleep_time)
+                    sleep(10 * sleep_time)
                     self.handle_error(e)
 
             if sleep_time:
                 sleep(sleep_time)
 
     def need_reindex(self):
-        if time() - self.reset_time > 7200:
+        if time() - self.reset_time < 7200:
             return datetime.now().hour < 2
         return False
 
+    def client_rewind(self, skip_until):
+        date = datetime.now() - timedelta(days=10)
+        if skip_until < date.strftime("%Y-%m-%d"):
+            return
+        date = parse_date(skip_until) - timedelta(days=2)
+        skip_until = date.strftime("%Y-%m-%d")
+        self.client.params.pop('offset', None)
+        self.client.params['descending'] = "1"
+        logger.info("Start rewind to %s", skip_until)
+        while True:
+            tenders_list = self.client.get_tenders()
+            if not tenders_list:
+                logger.error("Failed rewind to %s", skip_until)
+                self.client.params.pop('offset', None)
+                break
+            for item in tenders_list:
+                if item['dateModified'] > skip_until:
+                    break
+            if item['dateModified'] < skip_until:
+                logger.info("Rewind success to %s", item['dateModified'])
+                break
+            logger.debug("Rewind client, last %s", item['dateModified'])
+        self.client.params.pop('descending')
+
+    def skip_before_start(self):
+        if self.skip_until and self.client_config['allow_rewind']:
+            if self.client_config['feed'] == 'dateModified':
+                self.client.params['offset'] = self.skip_until
+            if self.client_config['feed'] == 'changes':
+                self.client_rewind(self.skip_until)
+
     def client_skip_until(self, skip_until=None):
-        self.skip_until = skip_until or self.client_config['skip_until']
-        if (self.client_config['feed'] == 'dateModified' and
-                self.skip_until and parse_date(self.skip_until)):
-            self.client.params['offset'] = self.skip_until
+        if not skip_until:
+            skip_until = self.client_config['skip_until']
+        if skip_until:
+            skip_until = skip_until[:10]
+        self.skip_until = skip_until
 
     def reset_client(self):
         logger.info("Client {}".format(self.client_config))
@@ -220,7 +254,10 @@ class ComplaintsClient(object):
             'key': self.client_config['key'],
             'host_url': self.client_config['host_url'],
             'api_version': self.client_config['api_version'],
-            'params': {'mode': self.client_config['mode']},
+            'params': {
+                'mode': self.client_config['mode'],
+                'limit': self.client_config['limit'],
+            },
         }
         self.client = TendersClient(**client_options)
         self.client_skip_until()
@@ -233,9 +270,11 @@ class ComplaintsClient(object):
             self.reset_client()
 
     def run(self):
+        self.skip_before_start()
         while not self.should_stop:
             if self.need_reindex():
+                if datetime.now().isoweekday() > 5:
+                    self.clear_cache()
                 self.reset_client()
-                self.clear_cache()
             self.process_all()
             sleep(self.conf_sleep)
