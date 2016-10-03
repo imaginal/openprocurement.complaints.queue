@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-#from gevent import monkey
-#monkey.patch_all()
 
 import os
 import sys
@@ -22,11 +20,15 @@ class Watchdog:
 
 
 def sigalrm_handler(signo, frame):
+    Watchdog.counter += 1
     if Watchdog.timeout:
         signal.alarm(Watchdog.timeout)
-    if Watchdog.counter > 0:
+    if Watchdog.counter > 3:
+        os._exit(1)
+    if Watchdog.counter > 2:
+        sys.exit(1)
+    if Watchdog.counter > 1:
         raise Watchdog.TimeoutError()
-    Watchdog.counter += 1
 
 
 def sigalrm(timeout=None):

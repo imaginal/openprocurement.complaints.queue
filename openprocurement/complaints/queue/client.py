@@ -200,7 +200,7 @@ class ComplaintsClient(object):
                 sleep(sleep_time)
 
     def need_reindex(self):
-        if time() - self.reset_time < 7200:
+        if time() - self.reset_time > 7500:
             return datetime.now().hour < 2
         return False
 
@@ -231,7 +231,7 @@ class ComplaintsClient(object):
             logger.debug("Rewind client, last %s", item['dateModified'])
         self.client.params.pop('descending')
 
-    def skip_before_start(self):
+    def update_offset_before_start(self):
         if self.skip_until and self.client_config['allow_rewind']:
             if self.client_config['feed'] == 'dateModified':
                 self.client.params['offset'] = self.skip_until
@@ -273,7 +273,7 @@ class ComplaintsClient(object):
             self.reset_client()
 
     def run(self):
-        self.skip_before_start()
+        self.update_offset_before_start()
         while not self.should_stop:
             if self.need_reindex():
                 if datetime.now().isoweekday() > 5:
