@@ -207,15 +207,18 @@ class ComplaintsClient(object):
     def client_rewind(self, skip_until):
         date = datetime.now() - timedelta(days=10)
         if skip_until < date.strftime("%Y-%m-%d"):
+            logger.info("Don't rewind, skip_until '%s' is too old", skip_until)
             return
         date = parse_date(skip_until) - timedelta(days=2)
         skip_until = date.strftime("%Y-%m-%d")
         self.client.params.pop('offset', None)
         self.client.params['descending'] = "1"
         logger.info("Start rewind to %s", skip_until)
-        while True:
+        for i in range(101):
+            if self.watchdog:
+                self.watchdog.counter = 0
             tenders_list = self.client.get_tenders()
-            if not tenders_list:
+            if not tenders_list or i >= 99:
                 logger.error("Failed rewind to %s", skip_until)
                 self.client.params.pop('offset', None)
                 break
@@ -238,7 +241,7 @@ class ComplaintsClient(object):
     def client_skip_until(self, skip_until=None):
         if not skip_until:
             skip_until = self.client_config['skip_until']
-        if skip_until:
+        if skip_until and skip_until[:2] == "20":
             skip_until = skip_until[:10]
         self.skip_until = skip_until
 
