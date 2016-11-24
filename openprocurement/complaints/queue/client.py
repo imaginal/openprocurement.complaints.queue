@@ -37,6 +37,7 @@ class ComplaintsClient(object):
         'store_draft': False,
         'allow_rewind': False,
         'skip_until': None,
+        'reindex_dow': 7,
         'sleep': 10,
     }
 
@@ -52,6 +53,7 @@ class ComplaintsClient(object):
             self.client_config.update(client_config)
         self.conf_timeout = float(self.client_config['timeout'] or 30)
         self.conf_sleep = float(self.client_config['sleep'] or 10)
+        self.reindex_dow = int(self.client_config['reindex_dow'] or 7)
         for k in ['use_cache', 'store_claim', 'store_draft']:
             self.client_config[k] = foce_bool(self.client_config.get(k))
         self.reset_client()
@@ -200,8 +202,9 @@ class ComplaintsClient(object):
                 sleep(sleep_time)
 
     def need_reindex(self):
-        if time() - self.reset_time > 7500:
-            return datetime.now().hour < 2
+        dt_now = datetime.now()
+        if dt_now.hour < 2 and dt_now.isoweekday() >= self.reindex_dow:
+            return time() - self.reset_time > 7500
         return False
 
     def client_rewind(self, skip_until):
@@ -267,10 +270,14 @@ class ComplaintsClient(object):
         self.reset_time = time()
         self.client_errors = 0
 
+    def restore_skip_until(self):
+        return
+
     def handle_error(self, error):
         self.client_errors += 1
         if self.client_errors >= 10:
             self.reset_client()
+            self.update_skip_until()
 
     def run(self):
         self.update_offset_before_start()

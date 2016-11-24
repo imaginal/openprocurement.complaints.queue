@@ -25,7 +25,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.table_name = self.mysql_config.pop('table')
         self.create_cursor()
         self.create_table()
-        self.update_skip_until()
+        self.restore_skip_until()
 
     def create_cursor(self):
         logger.info("Connect to mysql {} table '{}'".format(
@@ -108,7 +108,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.execute_query("TRUNCATE TABLE {table_name}_tenders")
         self.dbcon.commit()
 
-    def update_skip_until(self):
+    def restore_skip_until(self):
         self.execute_query("SELECT MAX(complaint_dateSubmitted) FROM {table_name}")
         row = self.cursor.fetchone()
         if not row or not row[0]:
@@ -118,7 +118,7 @@ class ComplaintsToMySQL(ComplaintsClient):
             logger.info("Ignore offset from database '%s' use from config '%s'",
                 row_date, self.skip_until)
             return
-        logger.info("Update offset from database, set to '%s'", row_date)
+        logger.info("Restore skip_until from database, set to '%s'", row_date)
         self.client_skip_until(row_date)
 
     def check_tender_exists(self, tender):
