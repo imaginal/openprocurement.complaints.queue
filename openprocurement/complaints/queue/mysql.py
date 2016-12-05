@@ -14,6 +14,11 @@ class ComplaintsToMySQL(ComplaintsClient):
         'passwd': '',
         'db': 'complaints',
         'table': 'complaints',
+        'charset': 'utf8',
+        'init_command': ('SET NAMES utf8; '+
+            'SET interactive_timeout=86400; '+
+            'SET wait_timeout=86400;'),
+        'connect_timeout': 10,
         'drop_cache': False
     }
 
@@ -40,14 +45,15 @@ class ComplaintsToMySQL(ComplaintsClient):
             **self.mysql_config)
         self.cursor = self.dbcon.cursor()
 
+
     def handle_error(self, error):
         super(ComplaintsToMySQL, self).handle_error(error)
-        if isinstance(error, MySQLdb.Error):
+        if isinstance(error, MySQLdb.MySQLError):
             self.cursor = None
             while not self.cursor:
                 try:
                     self.create_cursor()
-                except MySQLdb.Error as e:
+                except MySQLdb.MySQLError as e:
                     logger.error("Can't connect {}".format(e))
                     self.sleep(10)
 
@@ -82,7 +88,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         warnings.filterwarnings('error', category=MySQLdb.Warning)
         try:
             self.execute_query("SELECT 1 FROM {table_name} LIMIT 1")
-        except (MySQLdb.Error, MySQLdb.Warning):
+        except MySQLdb.MySQLError:
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
             self.dbcon.commit()
@@ -92,7 +98,7 @@ class ComplaintsToMySQL(ComplaintsClient):
             logger.warning("Drop cache table")
             try:
                 self.execute_query("SELECT 1 FROM {table_name}_cache LIMIT 1")
-            except (MySQLdb.Error, MySQLdb.Warning):
+            except MySQLdb.MySQLError:
                 self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
                 self.dbcon.commit()
         # create tenders cache
@@ -104,7 +110,7 @@ class ComplaintsToMySQL(ComplaintsClient):
             """
         try:
             self.execute_query("SELECT 1 FROM {table_name}_cache LIMIT 1")
-        except (MySQLdb.Error, MySQLdb.Warning):
+        except MySQLdb.MySQLError:
             logger.warning("Create table '%s_cache'", self.table_name)
             self.execute_query(SQL)
             self.dbcon.commit()
@@ -154,8 +160,8 @@ class ComplaintsToMySQL(ComplaintsClient):
                 tender.id, complaint_path, complaint.id)
             return True
         if row and row[1] == tender.dateModified:
-            logger.info("Exists T=%s P=%s C=%s by dateModified",
-                tender.id, complaint_path, complaint.id)
+            logger.info("Exists T=%s P=%s C=%s by dateModified %s",
+                tender.id, complaint_path, complaint.id, tender.dateModified)
             return True
         return False
 
