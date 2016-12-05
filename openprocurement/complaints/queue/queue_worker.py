@@ -35,12 +35,12 @@ def thread_watchdog():
     while True:
         Watchdog.counter += 1
         time.sleep(1)
-        if Watchdog.counter > Watchdog.timeout - 1:
+        if Watchdog.counter >= Watchdog.timeout:
             logger.warning("Watchdog counter %d", Watchdog.counter)
         if Watchdog.counter == Watchdog.timeout:
             os.kill(os.getpid(), signal.SIGTERM)
             signal.alarm(1)
-        if Watchdog.counter > Watchdog.timeout:
+        if Watchdog.counter > Watchdog.timeout + 5:
             os._exit(1)
             break
         if Watchdog.prntpid and Watchdog.prntpid != os.getppid():
