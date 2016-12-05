@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import MySQLdb
+import warnings
 import simplejson as json
 from openprocurement.complaints.queue.client import ComplaintsClient, getboolean, logger
 
@@ -79,9 +80,10 @@ class ComplaintsToMySQL(ComplaintsClient):
                   KEY tender_procurementMethod (tender_procurementMethod)
                 ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             """
+        warnings.filterwarnings('error', category=MySQLdb.Warning)
         try:
             self.execute_query("SELECT 1 FROM {table_name} LIMIT 1")
-        except MySQLdb.Error:
+        except (MySQLdb.Error, MySQLdb.Warning):
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
             self.dbcon.commit()
@@ -97,7 +99,7 @@ class ComplaintsToMySQL(ComplaintsClient):
             """
         try:
             self.execute_query("SELECT 1 FROM {table_name}_cache LIMIT 1")
-        except MySQLdb.Error:
+        except (MySQLdb.Error, MySQLdb.Warning):
             logger.warning("Create table '%s_cache'", self.table_name)
             self.execute_query(SQL)
             self.dbcon.commit()

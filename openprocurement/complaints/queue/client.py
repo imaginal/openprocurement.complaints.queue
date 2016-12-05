@@ -225,7 +225,7 @@ class ComplaintsClient(object):
                 self.sleep(sleep_time)
 
     def need_clear_cache(self):
-        if not self.client_config['use_cache']:
+        if not self.client_config.get('use_cache', False):
             return False
         if datetime.now().isoweekday() == self.clear_cache_wday:
             return self.need_reset_client()
