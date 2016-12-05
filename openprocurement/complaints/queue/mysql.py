@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from time import sleep
 import MySQLdb
 import simplejson as json
 from openprocurement.complaints.queue.client import ComplaintsClient, logger
@@ -25,7 +24,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.table_name = self.mysql_config.pop('table')
         self.create_cursor()
         self.create_table()
-        self.restore_skip_until()
+        self.update_skip_until()
 
     def create_cursor(self):
         logger.info("Connect to mysql {} table '{}'".format(
@@ -47,7 +46,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                     self.create_cursor()
                 except MySQLdb.Error as e:
                     logger.error("Can't connect {}".format(e))
-                    sleep(10)
+                    self.sleep(10)
 
     def execute_query(self, sql, *args, **kwargs):
         return self.cursor.execute(sql.format(table_name=self.table_name), *args)
@@ -79,36 +78,35 @@ class ComplaintsToMySQL(ComplaintsClient):
             """
         try:
             self.execute_query("SELECT 1 FROM {table_name} LIMIT 1")
-            clear_cache = False
         except MySQLdb.Error:
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
             self.dbcon.commit()
-            clear_cache = True
-        # clear cache table
-        if clear_cache:
-            self.execute_query("DROP TABLE IF EXISTS {table_name}_tenders")
+            # also clear cache table
+            self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
             self.dbcon.commit()
         # create tenders cache
-        SQL = """CREATE TABLE IF NOT EXISTS {table_name}_tenders (
+        SQL = """CREATE TABLE IF NOT EXISTS {table_name}_cache (
                   tender_id char(32) NOT NULL,
                   tender_dateModified varchar(40) NOT NULL,
                   PRIMARY KEY (tender_id)
                 ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             """
         try:
-            self.execute_query("SELECT 1 FROM {table_name}_tenders LIMIT 1")
+            self.execute_query("SELECT 1 FROM {table_name}_cache LIMIT 1")
         except MySQLdb.Error:
-            logger.warning("Create table '%s_tenders'", self.table_name)
+            logger.warning("Create table '%s_cache'", self.table_name)
             self.execute_query(SQL)
             self.dbcon.commit()
 
     def clear_cache(self):
-        logger.warning("Clear cache table '%s_tenders'", self.table_name)
-        self.execute_query("TRUNCATE TABLE {table_name}_tenders")
+        if getattr(self, 'dbcon', None) is None:
+            return
+        logger.warning("Clear cache table '%s_cache'", self.table_name)
+        self.execute_query("TRUNCATE TABLE {table_name}_cache")
         self.dbcon.commit()
 
-    def restore_skip_until(self):
+    def update_skip_until(self):
         self.execute_query("SELECT MAX(complaint_dateSubmitted) FROM {table_name}")
         row = self.cursor.fetchone()
         if not row or not row[0]:
@@ -118,17 +116,17 @@ class ComplaintsToMySQL(ComplaintsClient):
             logger.info("Ignore offset from database '%s' use from config '%s'",
                 row_date, self.skip_until)
             return
-        logger.info("Restore skip_until from database, set to '%s'", row_date)
-        self.client_skip_until(row_date)
+        logger.info("Update offset from database, set to '%s'", row_date)
+        self.client_skip_until(row_date, skip_days=1)
 
-    def check_tender_exists(self, tender):
-        self.execute_query(("SELECT tender_dateModified FROM {table_name}_tenders " +
+    def check_cache(self, tender):
+        self.execute_query(("SELECT tender_dateModified FROM {table_name}_cache " +
             "WHERE tender_id=%s LIMIT 1"), (tender.id,))
         row = self.cursor.fetchone()
         return row and row[0] == tender.dateModified
 
     def finish_tender(self, tender):
-        SQL = ("INSERT INTO {table_name}_tenders (tender_id, tender_dateModified) " +
+        SQL = ("INSERT INTO {table_name}_cache (tender_id, tender_dateModified) " +
                "VALUES (%s, %s) ON DUPLICATE KEY UPDATE tender_dateModified=%s")
         # logger.debug(SQL)
         self.execute_query(SQL, (tender.id, tender.dateModified, tender.dateModified))

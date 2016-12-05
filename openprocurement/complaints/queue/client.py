@@ -11,14 +11,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def foce_bool(value):
+def getboolean(value):
     bool_dict = {'y': 1, 'n': 0, 'yes': 1, 'no': 0,
         'on': 1, 'off': 0, 'true': 1, 'false': 0}
     try:
-        return int(value or 0)
+        return bool_dict[value.strip().lower()]
     except:
-        pass
-    return bool_dict[value.strip().lower()]
+        return int(value or 0)
 
 
 class ComplaintsClient(object):
@@ -35,33 +34,53 @@ class ComplaintsClient(object):
         'use_cache': False,
         'store_claim': False,
         'store_draft': False,
-        'allow_rewind': False,
+        'fast_rewind': False,
         'skip_until': None,
-        'reindex_dow': 7,
+        'reset_hour': 22,
+        'clear_wday': 6,
         'sleep': 10,
     }
+
+    reset_client_hour = 22
+    clear_cache_wday = 7
+    last_reset_time = 0
 
     store_tender_fields = ['id', 'tenderID', 'title', 'status', 'mode',
         'procuringEntity', 'procurementMethod', 'procurementMethodType',
         'dateModified']
 
-    should_stop = False
     watchdog = None
+    needstop = False
 
     def __init__(self, client_config=None):
         if client_config:
             self.client_config.update(client_config)
         self.conf_timeout = float(self.client_config['timeout'] or 30)
         self.conf_sleep = float(self.client_config['sleep'] or 10)
-        self.reindex_dow = int(self.client_config['reindex_dow'] or 7)
-        for k in ['use_cache', 'store_claim', 'store_draft']:
-            self.client_config[k] = foce_bool(self.client_config.get(k))
+        for k in ['use_cache', 'store_claim', 'store_draft', 'fast_rewind']:
+            self.client_config[k] = getboolean(self.client_config.get(k))
+        self.reset_client_hour = int(self.client_config['reset_hour'])
+        self.clear_cache_wday = int(self.client_config['clear_wday'])
         self.reset_client()
+
+    @property
+    def should_stop(self):
+        if self.watchdog and self.watchdog.counter > 1:
+            return True
+        return self.needstop
+
+    def sleep(self, seconds):
+        for i in range(int(2 * seconds)):
+            if self.should_stop:
+                break
+            if self.watchdog:
+                self.watchdog.counter = 0
+            sleep(0.5)
 
     def clear_cache(self):
         logger.debug("Fake clear cache")
 
-    def check_tender_exists(self, tender):
+    def check_cache(self, tender):
         return False
 
     def check_exists(self, tender, complaint_path, complaint):
@@ -108,17 +127,17 @@ class ComplaintsClient(object):
         """return True if we should not store this complaint in queue"""
         # July 2, 2016 by Julia Dvornyk, don't store complaint.type == 'claim'
         if complaint.get('type', '') == 'claim' and not self.client_config['store_claim']:
-            logger.warning("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
+            logger.info("Ignore T=%s P=%s C=%s by type CT=%s", tender.id,
                 complaint_path, complaint.id, complaint.get('type', ''))
             return True
         # July 26, 2016 by Andriy Kucherenko, don't store complaint.status == 'draft'
         if complaint.get('status', '') == 'draft' and not self.client_config['store_draft']:
-            logger.warning("Ignore T=%s P=%s C=%s by status S=%s", tender.id,
+            logger.info("Ignore T=%s P=%s C=%s by status S=%s", tender.id,
                 complaint_path, complaint.id, complaint.get('status', ''))
             return True
         # Aug 11, 2016 by Julia Dvornyk, don't store w/o dateSubmitted
         if not complaint.get('dateSubmitted', ''):
-            logger.warning("Ignore T=%s P=%s C=%s dateSubmitted not set",
+            logger.info("Ignore T=%s P=%s C=%s dateSubmitted not set",
                 tender.id, complaint_path, complaint.id)
             return True
 
@@ -144,7 +163,7 @@ class ComplaintsClient(object):
         return tender['data']
 
     def process_tender(self, tender):
-        if self.client_config['use_cache'] and self.check_tender_exists(tender):
+        if self.client_config['use_cache'] and self.check_cache(tender):
             logger.debug("Exists T=%s DM=%s", tender.id, tender.dateModified)
             return
 
@@ -171,6 +190,8 @@ class ComplaintsClient(object):
 
     def process_all(self, sleep_time=1):
         while True:
+            if self.should_stop:
+                break
             if self.watchdog:
                 self.watchdog.counter = 0
             try:
@@ -178,7 +199,7 @@ class ComplaintsClient(object):
                 tenders_list = self.client.get_tenders(feed=feed)
             except Exception as e:
                 logger.exception("Fail get_tenders")
-                sleep(10 * sleep_time)
+                self.sleep(10 * sleep_time)
                 self.handle_error(e)
                 continue
 
@@ -186,6 +207,8 @@ class ComplaintsClient(object):
                 break
 
             for tender in tenders_list:
+                if self.should_stop:
+                    break
                 if self.watchdog:
                     self.watchdog.counter = 0
                 if self.skip_until and self.skip_until > tender.dateModified:
@@ -195,25 +218,31 @@ class ComplaintsClient(object):
                     self.process_tender(tender)
                 except Exception as e:
                     logger.exception("Fail on {} error {}: {}".format(tender, type(e), e))
-                    sleep(10 * sleep_time)
+                    self.sleep(10 * sleep_time)
                     self.handle_error(e)
 
             if sleep_time:
-                sleep(sleep_time)
+                self.sleep(sleep_time)
 
-    def need_reindex(self):
-        dt_now = datetime.now()
-        if dt_now.hour < 2 and dt_now.isoweekday() >= self.reindex_dow:
-            return time() - self.reset_time > 7500
+    def need_clear_cache(self):
+        if not self.client_config['use_cache']:
+            return False
+        if datetime.now().isoweekday() == self.clear_cache_wday:
+            return self.need_reset_client()
+
+    def need_reset_client(self):
+        if datetime.now().hour == self.reset_client_hour:
+            return time() - self.last_reset_time > 3600
         return False
 
-    def client_rewind(self, skip_until):
+    def client_rewind(self, skip_until, skip_days=0):
         date = datetime.now() - timedelta(days=10)
         if skip_until < date.strftime("%Y-%m-%d"):
             logger.info("Don't rewind, skip_until '%s' is too old", skip_until)
             return
-        date = parse_date(skip_until) - timedelta(days=2)
-        skip_until = date.strftime("%Y-%m-%d")
+        if skip_days:
+            date = parse_date(skip_until) - timedelta(days=skip_days)
+            skip_until = date.strftime("%Y-%m-%d")
         self.client.params.pop('offset', None)
         self.client.params['descending'] = "1"
         logger.info("Start rewind to %s", skip_until)
@@ -235,17 +264,20 @@ class ComplaintsClient(object):
         self.client.params.pop('descending')
 
     def update_offset_before_start(self):
-        if self.skip_until and self.client_config['allow_rewind']:
+        if self.skip_until and self.client_config['fast_rewind']:
             if self.client_config['feed'] == 'dateModified':
                 self.client.params['offset'] = self.skip_until
             if self.client_config['feed'] == 'changes':
                 self.client_rewind(self.skip_until)
 
-    def client_skip_until(self, skip_until=None):
+    def client_skip_until(self, skip_until=None, skip_days=0):
         if not skip_until:
             skip_until = self.client_config['skip_until']
         if skip_until and skip_until[:2] == "20":
             skip_until = skip_until[:10]
+        if skip_days:
+            date = parse_date(skip_until) - timedelta(days=skip_days)
+            skip_until = date.strftime("%Y-%m-%d")
         self.skip_until = skip_until
 
     def reset_client(self):
@@ -265,26 +297,27 @@ class ComplaintsClient(object):
                 'limit': self.client_config['limit'],
             },
         }
+        if self.client_config.get('descending', False):
+            client_options['params']['descending'] = "1"
         self.client = TendersClient(**client_options)
         self.client_skip_until()
-        self.reset_time = time()
+        self.last_reset_time = time()
         self.client_errors = 0
-
-    def restore_skip_until(self):
-        return
 
     def handle_error(self, error):
         self.client_errors += 1
         if self.client_errors >= 10:
             self.reset_client()
-            self.update_skip_until()
 
     def run(self):
+        if self.client_config.get('descending', False):
+            return self.process_all()
+
         self.update_offset_before_start()
         while not self.should_stop:
-            if self.need_reindex():
-                if datetime.now().isoweekday() > 5:
-                    self.clear_cache()
+            if self.need_clear_cache():
+                self.clear_cache()
+            if self.need_reset_client():
                 self.reset_client()
             self.process_all()
-            sleep(self.conf_sleep)
+            self.sleep(self.conf_sleep)
