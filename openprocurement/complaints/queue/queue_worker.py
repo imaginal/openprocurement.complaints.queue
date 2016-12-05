@@ -124,7 +124,6 @@ def run_app(config, descending=False):
     if descending:
         logger.info("Start in descending mode")
         client_config.append(('descending', 1))
-        mysql_config.append(('continue', 0))
 
     app = ComplaintsToMySQL(client_config, mysql_config)
     app.watchdog = Watchdog
@@ -162,7 +161,10 @@ def run_workers(config):
     workers = int(config.get('general', 'workers') or 0)
 
     if not workers:
+        logger.info("*** Starting in signle process")
         return run_app(config)
+
+    logger.info("*** Starting watcher with %d workers", workers)
 
     pool = {}
 
@@ -183,9 +185,6 @@ def run_workers(config):
                 p['process'] = process
             if process.is_alive():
                 process.join(1)
-            elif process.exitcode == 0 and k == 'bwd': # allow stop only for backward child
-                logger.info("Success stop child %s", process.name)
-                pool.pop(k)
             else:
                 logger.warning("Child %s exited with error %d",
                     process.name, process.exitcode)

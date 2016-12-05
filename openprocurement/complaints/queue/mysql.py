@@ -14,7 +14,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         'passwd': '',
         'db': 'complaints',
         'table': 'complaints',
-        'continue': True
+        'drop_cache': False
     }
 
     def __init__(self, client_config=None, mysql_config=None):
@@ -24,11 +24,11 @@ class ComplaintsToMySQL(ComplaintsClient):
         # remove passwd before dump config to log
         self.mysql_passwd = self.mysql_config.pop('passwd')
         self.table_name = self.mysql_config.pop('table')
-        self.continue_skip_until = self.mysql_config.pop('continue')
+        self.restore_offset = self.mysql_config.pop('restore_offset')
+        self.drop_cache = self.mysql_config.pop('drop_cache')
         self.create_cursor()
         self.create_table()
-        if getboolean(self.continue_skip_until):
-            self.restore_skip_until()
+        self.restore_skip_until()
 
     def create_cursor(self):
         logger.info("Connect to mysql {} table '{}'".format(
@@ -87,7 +87,9 @@ class ComplaintsToMySQL(ComplaintsClient):
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
             self.dbcon.commit()
-            # also clear cache table
+            self.drop_cache = True
+        if getboolean(self.drop_cache):
+            logger.warning("Drop cache table")
             self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
             self.dbcon.commit()
         # create tenders cache
@@ -112,6 +114,8 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.dbcon.commit()
 
     def restore_skip_until(self):
+        if self.descending_mode:
+            return
         self.execute_query("SELECT MAX(complaint_dateSubmitted) FROM {table_name}")
         row = self.cursor.fetchone()
         if not row or not row[0]:
