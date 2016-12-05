@@ -161,10 +161,10 @@ def run_workers(config):
     workers = int(config.get('general', 'workers') or 0)
 
     if not workers:
-        logger.info("*** Starting in signle process")
+        logger.info("Starting in signle process")
         return run_app(config)
 
-    logger.info("*** Starting watcher with %d workers", workers)
+    logger.info("Starting watcher with %d workers", workers)
 
     pool = {}
 
