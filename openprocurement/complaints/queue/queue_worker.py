@@ -38,8 +38,9 @@ def thread_watchdog():
         if Watchdog.counter > Watchdog.timeout - 1:
             logger.warning("Watchdog counter %d", Watchdog.counter)
         if Watchdog.counter == Watchdog.timeout:
+            os.kill(os.getpid(), signal.SIGTERM)
             signal.alarm(1)
-        if Watchdog.counter > Watchdog.timeout + 1:
+        if Watchdog.counter > Watchdog.timeout:
             os._exit(1)
             break
         if Watchdog.prntpid and Watchdog.prntpid != os.getppid():
@@ -58,8 +59,10 @@ def setup_watchdog(timeout):
 
 def sigterm_handler(signo, frame):
     logger.warning("Signal received %d", signo)
+    if Watchdog.counter >= Watchdog.timeout:
+        raise Watchdog.TimeoutError()
     Watchdog.counter = Watchdog.timeout
-    signal.alarm(2)
+    signal.alarm(1)
     sys.exit(0)
 
 
