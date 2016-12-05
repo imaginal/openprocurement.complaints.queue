@@ -9,6 +9,7 @@ import time
 import signal
 import logging
 import logging.config
+from threading import Thread
 from multiprocessing import Process
 from ConfigParser import ConfigParser, Error as ConfigParserError
 from openprocurement.complaints.queue.mysql import ComplaintsToMySQL
@@ -17,43 +18,48 @@ logger = logging.getLogger(__name__)
 
 
 class Watchdog:
-    class WatchdogError(Exception):
+    class TimeoutError(Exception):
         pass
+    _thread = None
     counter = 0
     timeout = 0
     prntpid = 0
 
 
-def sigalrm_handler(signo, frame):
-    logger.info("Watchdog %d", Watchdog.counter)
-    Watchdog.counter += 1
-    if Watchdog.timeout:
-        signal.alarm(Watchdog.timeout)
-    if Watchdog.counter > 3:
-        os._exit(1)
-    if Watchdog.counter > 2:
-        sys.exit(1)
-    if Watchdog.counter > 1:
-        raise Watchdog.WatchdogError("sigalrm")
-    if Watchdog.prntpid and Watchdog.prntpid != os.getppid():
-        raise RuntimeError("Parent pid changed")
+def sigalrm_handler(signum, frame):
+    if Watchdog.counter >= Watchdog.timeout:
+        raise Watchdog.TimeoutError()
 
 
-def sigalrm(timeout):
-    if not timeout or int(timeout) < 1:
+def thread_watchdog():
+    while True:
+        Watchdog.counter += 1
+        time.sleep(1)
+        if Watchdog.counter > Watchdog.timeout - 1:
+            logger.warning("Watchdog counter %d", Watchdog.counter)
+        if Watchdog.counter == Watchdog.timeout:
+            signal.alarm(1)
+        if Watchdog.counter > Watchdog.timeout + 1:
+            os._exit(1)
+            break
+        if Watchdog.prntpid and Watchdog.prntpid != os.getppid():
+            raise RuntimeError("Parent pid changed")
+
+
+def setup_watchdog(timeout):
+    if not timeout or int(timeout) < 5:
         return
     signal.signal(signal.SIGALRM, sigalrm_handler)
     Watchdog.timeout = int(timeout)
-    signal.alarm(Watchdog.timeout)
+    t = Thread(target=thread_watchdog)
+    t.daemon = True
+    t.start()
 
 
 def sigterm_handler(signo, frame):
     logger.warning("Signal received %d", signo)
-    # also setup reserve plan via SIGALRM
-    signal.signal(signal.SIGALRM, sigalrm_handler)
-    Watchdog.counter = 5
+    Watchdog.counter = Watchdog.timeout
     signal.alarm(2)
-    # and exit
     sys.exit(0)
 
 
@@ -103,6 +109,8 @@ class MyConfigParser(ConfigParser):
     def get(self, section, option, default=None):
         try:
             value = ConfigParser.get(self, section, option)
+            if value and isinstance(value, str):
+                value = value.strip(' \t\'"')
         except ConfigParserError:
             value = default
         return value
@@ -116,7 +124,7 @@ class MyConfigParser(ConfigParser):
 
 
 def run_app(config, descending=False):
-    sigalrm(config.get('general', 'sigalrm'))
+    setup_watchdog(config.get('general', 'watchdog'))
 
     client_config = config.items('client')
     mysql_config = config.items('mysql')
@@ -130,12 +138,13 @@ def run_app(config, descending=False):
     try:
         app.run()
     except KeyboardInterrupt:
-        pass
+        sys.exit(2)
     except Exception as e:
         logger.exception("%s %s", type(e).__name__, str(e))
+        Watchdog.counter = Watchdog.timeout
         sys.exit(1)
 
-    logger.info("Leave app.run")
+    logger.info("Leave worker")
     return 0
 
 
@@ -221,7 +230,6 @@ def main():
 
     update_config(config, args)
 
-    signal.signal(signal.SIGINT, sigterm_handler)
     signal.signal(signal.SIGTERM, sigterm_handler)
 
     if config.getboolean('general', 'daemon'):
@@ -232,7 +240,7 @@ def main():
     try:
         run_workers(config)
     except KeyboardInterrupt:
-        pass
+        sys.exit(2)
     except Exception as e:
         logger.exception("%s %s", type(e).__name__, str(e))
         sys.exit(1)

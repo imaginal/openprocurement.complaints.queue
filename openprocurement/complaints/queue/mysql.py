@@ -2,6 +2,7 @@
 import MySQLdb
 import warnings
 import simplejson as json
+from retrying import retry
 from openprocurement.complaints.queue.client import ComplaintsClient, getboolean, logger
 
 
@@ -15,11 +16,10 @@ class ComplaintsToMySQL(ComplaintsClient):
         'db': 'complaints',
         'table': 'complaints',
         'charset': 'utf8',
-        'init_command': ('SET NAMES utf8; '+
-            'SET interactive_timeout=86400; '+
-            'SET wait_timeout=86400;'),
-        'connect_timeout': 10,
-        'drop_cache': False
+        'init_command': 'SET NAMES utf8',
+        'connect_timeout': 300,
+        'drop_cache': False,
+        'keep_alive': True,
     }
 
     def __init__(self, client_config=None, mysql_config=None):
@@ -30,13 +30,20 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.mysql_passwd = self.mysql_config.pop('passwd')
         self.table_name = self.mysql_config.pop('table')
         self.drop_cache = self.mysql_config.pop('drop_cache')
+        self.keep_alive = self.mysql_config.pop('keep_alive')
+        for k in ['init_command']:
+            self.mysql_config[k] = self.mysql_config[k].strip(' \t"')
+        for k in ['connect_timeout']:
+            self.mysql_config[k] = int(self.mysql_config[k] or 0)
         self.create_cursor()
         self.create_table()
         self.restore_skip_until()
 
+    @retry(stop_max_attempt_number=5, wait_fixed=5000)
     def create_cursor(self):
         logger.info("Connect to mysql {} table '{}'".format(
             self.mysql_config, self.table_name))
+        self.reset_watchdog()
         # close db handle if present
         if getattr(self, 'dbcon', None):
             dbcon, self.dbcon = self.dbcon, None
@@ -45,17 +52,11 @@ class ComplaintsToMySQL(ComplaintsClient):
             **self.mysql_config)
         self.cursor = self.dbcon.cursor()
 
-
     def handle_error(self, error):
         super(ComplaintsToMySQL, self).handle_error(error)
         if isinstance(error, MySQLdb.MySQLError):
             self.cursor = None
-            while not self.cursor:
-                try:
-                    self.create_cursor()
-                except MySQLdb.MySQLError as e:
-                    logger.error("Can't connect {}".format(e))
-                    self.sleep(10)
+            self.create_cursor()
 
     def execute_query(self, sql, *args, **kwargs):
         return self.cursor.execute(sql.format(table_name=self.table_name), *args)
@@ -134,7 +135,7 @@ class ComplaintsToMySQL(ComplaintsClient):
             logger.info("Ignore offset from database '%s' use from config '%s'",
                 row_date, self.skip_until)
             return
-        logger.info("Update offset from database, set to '%s'", row_date)
+        logger.info("Restore offset from database '%s'", row_date)
         self.client_skip_until(row_date, skip_days=1)
 
     def check_cache(self, tender):
@@ -150,17 +151,25 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.execute_query(SQL, (tender.id, tender.dateModified, tender.dateModified))
         self.dbcon.commit()
 
+    def ping_backend(self):
+        if not getboolean(self.keep_alive):
+            return
+        try:
+            self.execute_query("SELECT 1")
+        except MySQLdb.MySQLError as e:
+            self.handle_error(e)
+
     def check_exists(self, tender, complaint_path, complaint):
         self.execute_query(("SELECT tender_status, tender_dateModified " +
             "FROM {table_name} WHERE complaint_id=%s LIMIT 1"), (complaint.id,))
         row = self.cursor.fetchone()
         # don't update rows in terminal status
         if row and row[0] == "cancelled":
-            logger.info("Exists T=%s P=%s C=%s by TS=cancelled",
+            logger.info("Ignore T=%s P=%s C=%s by TS=cancelled",
                 tender.id, complaint_path, complaint.id)
             return True
         if row and row[1] == tender.dateModified:
-            logger.info("Exists T=%s P=%s C=%s by dateModified %s",
+            logger.info("Exists T=%s P=%s C=%s by DM=%s",
                 tender.id, complaint_path, complaint.id, tender.dateModified)
             return True
         return False

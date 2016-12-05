@@ -52,7 +52,6 @@ class ComplaintsClient(object):
         'dateModified']
 
     watchdog = None
-    needstop = False
 
     def __init__(self, client_config=None):
         if client_config:
@@ -68,16 +67,19 @@ class ComplaintsClient(object):
 
     @property
     def should_stop(self):
-        if self.watchdog and self.watchdog.counter > 1:
-            raise self.watchdog.WatchdogError("should_stop")
-        return self.needstop
+        if self.watchdog:
+            return self.watchdog.counter >= self.watchdog.timeout
+        return False
+
+    def reset_watchdog(self):
+        if self.watchdog:
+            self.watchdog.counter = 0
 
     def sleep(self, seconds):
         for i in range(int(2 * seconds)):
             if self.should_stop:
                 break
-            if self.watchdog:
-                self.watchdog.counter = 0
+            self.reset_watchdog()
             sleep(0.5)
 
     def clear_cache(self):
@@ -99,6 +101,9 @@ class ComplaintsClient(object):
 
     def finish_tender(self, tender):
         logger.debug("Finish tender T=%s DM=%s", tender.id, tender.dateModified)
+
+    def ping_backend(self):
+        pass
 
     def related_lot_status(self, tender, complaint):
         relatedLot = complaint.get('relatedLot', None)
@@ -162,6 +167,7 @@ class ComplaintsClient(object):
 
     @retry(stop_max_attempt_number=5, wait_fixed=5000)
     def get_tender_data(self, tender_id):
+        self.reset_watchdog()
         tender = self.client.get_tender(tender_id)
         return tender['data']
 
@@ -193,8 +199,8 @@ class ComplaintsClient(object):
 
     def process_all(self, sleep_time=1):
         while not self.should_stop:
-            if self.watchdog:
-                self.watchdog.counter = 0
+            self.reset_watchdog()
+            self.ping_backend()
             try:
                 feed = self.client_config['feed'] or 'changes'
                 tenders_list = self.client.get_tenders(feed=feed)
@@ -212,8 +218,6 @@ class ComplaintsClient(object):
                 self.tenders_count += 1
                 if self.should_stop:
                     break
-                if self.watchdog:
-                    self.watchdog.counter = 0
                 if self.skip_until and self.skip_until > tender.dateModified:
                     logger.debug("Ignore T=%s DM=%s", tender.id, tender.dateModified)
                     continue
@@ -225,8 +229,8 @@ class ComplaintsClient(object):
                     self.handle_error(e)
 
             if tender:
-                logger.info("Processed %d tenders last %s",
-                    self.tenders_count, tender.dateModified)
+                logger.info("Processed %d tenders, last %s",
+                    self.tenders_count, tender.get('dateModified'))
 
             if sleep_time:
                 self.sleep(sleep_time)
@@ -257,9 +261,13 @@ class ComplaintsClient(object):
         self.client.params['descending'] = "1"
         logger.info("Start fast_rewind to %s", skip_until)
         for i in range(101):
-            if self.watchdog:
-                self.watchdog.counter = 0
-            tenders_list = self.client.get_tenders()
+            self.reset_watchdog()
+            try:
+                tenders_list = self.client.get_tenders()
+            except Exception as e:
+                logger.error("get_tenders %s", str(e))
+                self.client.params.pop('offset', None)
+                break
             if not tenders_list or i >= 99:
                 logger.error("Failed rewind to %s", skip_until)
                 self.client.params.pop('offset', None)
@@ -293,6 +301,7 @@ class ComplaintsClient(object):
         if skip_days:
             date = parse_date(skip_until) - timedelta(days=skip_days)
             skip_until = date.strftime("%Y-%m-%d")
+        logger.info("Set skip_until=%s", skip_until)
         self.skip_until = skip_until
 
     @retry(stop_max_attempt_number=5, wait_fixed=5000)
