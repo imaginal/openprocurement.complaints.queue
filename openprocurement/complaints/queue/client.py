@@ -44,6 +44,8 @@ class ComplaintsClient(object):
     reset_client_hour = 22
     clear_cache_wday = 7
     last_reset_time = 0
+    client_errors = 0
+    tenders_count = 0
 
     store_tender_fields = ['id', 'tenderID', 'title', 'status', 'mode',
         'procuringEntity', 'procurementMethod', 'procurementMethodType',
@@ -205,7 +207,9 @@ class ComplaintsClient(object):
             if not tenders_list:
                 break
 
+            tender = None
             for tender in tenders_list:
+                self.tenders_count += 1
                 if self.should_stop:
                     break
                 if self.watchdog:
@@ -219,6 +223,10 @@ class ComplaintsClient(object):
                     logger.exception("Fail on {} error {}: {}".format(tender, type(e), e))
                     self.sleep(10 * sleep_time)
                     self.handle_error(e)
+
+            if tender:
+                logger.info("Processed %d tenders last %s",
+                    self.tenders_count, tender.dateModified)
 
             if sleep_time:
                 self.sleep(sleep_time)
@@ -311,6 +319,7 @@ class ComplaintsClient(object):
         self.client_skip_until()
         self.last_reset_time = time()
         self.client_errors = 0
+        self.tenders_count = 0
 
     def handle_error(self, error):
         self.client_errors += 1
