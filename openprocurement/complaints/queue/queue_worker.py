@@ -54,7 +54,7 @@ def sigterm_handler(signo, frame):
     Watchdog.counter = 5
     signal.alarm(2)
     # and exit
-    sys.exit(2)
+    sys.exit(0)
 
 
 def daemonize(logfile):
@@ -183,7 +183,7 @@ def run_workers(config):
                 p['process'] = process
             if process.is_alive():
                 process.join(1)
-            elif process.exitcode == 0 and k == 'bwd': # only 4 backward child
+            elif process.exitcode == 0 and k == 'bwd': # allow stop only for backward child
                 logger.info("Success stop child %s", process.name)
                 pool.pop(k)
             else:
