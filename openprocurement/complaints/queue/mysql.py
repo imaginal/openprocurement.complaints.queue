@@ -24,7 +24,6 @@ class ComplaintsToMySQL(ComplaintsClient):
         # remove passwd before dump config to log
         self.mysql_passwd = self.mysql_config.pop('passwd')
         self.table_name = self.mysql_config.pop('table')
-        self.restore_offset = self.mysql_config.pop('restore_offset')
         self.drop_cache = self.mysql_config.pop('drop_cache')
         self.create_cursor()
         self.create_table()
