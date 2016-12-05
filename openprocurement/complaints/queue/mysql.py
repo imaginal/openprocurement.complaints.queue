@@ -87,10 +87,14 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.execute_query(SQL)
             self.dbcon.commit()
             self.drop_cache = True
+        # drop cache if we create main table
         if getboolean(self.drop_cache):
             logger.warning("Drop cache table")
-            self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
-            self.dbcon.commit()
+            try:
+                self.execute_query("SELECT 1 FROM {table_name}_cache LIMIT 1")
+            except (MySQLdb.Error, MySQLdb.Warning):
+                self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
+                self.dbcon.commit()
         # create tenders cache
         SQL = """CREATE TABLE IF NOT EXISTS {table_name}_cache (
                   tender_id char(32) NOT NULL,
