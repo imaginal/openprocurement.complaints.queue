@@ -89,9 +89,10 @@ def write_pidfile(filename):
     if not filename:
         return
     # try get exclusive lock to prevent second start
+    mypid = os.getpid()
+    logger.info("Save %d to pidfile %s", mypid, filename)
     lock_file = open(filename, "w")
     fcntl.lockf(lock_file, fcntl.LOCK_EX + fcntl.LOCK_NB)
-    mypid = os.getpid()
     lock_file.write(str(mypid) + "\n")
     lock_file.flush()
     atexit.register(remove_pidfile, lock_file, filename, mypid)

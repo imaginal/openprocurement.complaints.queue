@@ -238,14 +238,14 @@ class ComplaintsClient(object):
     def client_rewind(self, skip_until, skip_days=0):
         date = datetime.now() - timedelta(days=10)
         if skip_until < date.strftime("%Y-%m-%d"):
-            logger.info("Don't rewind, skip_until '%s' is too old", skip_until)
+            logger.info("%s is too old for fast_rewind", skip_until)
             return
         if skip_days:
             date = parse_date(skip_until) - timedelta(days=skip_days)
             skip_until = date.strftime("%Y-%m-%d")
         self.client.params.pop('offset', None)
         self.client.params['descending'] = "1"
-        logger.info("Start rewind to %s", skip_until)
+        logger.info("Start fast_rewind to %s", skip_until)
         for i in range(101):
             if self.watchdog:
                 self.watchdog.counter = 0
