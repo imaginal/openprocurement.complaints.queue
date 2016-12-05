@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class Watchdog:
-    class TimeoutError(Exception):
+    class WatchdogError(Exception):
         pass
     counter = 0
     timeout = 0
@@ -34,9 +34,10 @@ def sigalrm_handler(signo, frame):
     if Watchdog.counter > 2:
         sys.exit(1)
     if Watchdog.counter > 1:
-        raise Watchdog.TimeoutError()
+        raise Watchdog.WatchdogError("sigalrm")
     if Watchdog.prntpid and Watchdog.prntpid != os.getppid():
         raise RuntimeError("Parent pid changed")
+
 
 def sigalrm(timeout):
     if not timeout or int(timeout) < 1:
@@ -53,7 +54,7 @@ def sigterm_handler(signo, frame):
     Watchdog.counter = 5
     signal.alarm(2)
     # and exit
-    sys.exit(0)
+    sys.exit(2)
 
 
 def daemonize(logfile):
@@ -76,7 +77,9 @@ def daemonize(logfile):
     os.dup2(ferr.fileno(), 2)
 
 
-def remove_pidfile(lock_file, filename):
+def remove_pidfile(lock_file, filename, mypid):
+    if mypid != os.getpid():
+        return
     logger.info("Remove pidfile %s", filename)
     lock_file.close()
     os.remove(filename)
@@ -88,9 +91,10 @@ def write_pidfile(filename):
     # try get exclusive lock to prevent second start
     lock_file = open(filename, "w")
     fcntl.lockf(lock_file, fcntl.LOCK_EX + fcntl.LOCK_NB)
-    lock_file.write(str(os.getpid()) + "\n")
+    mypid = os.getpid()
+    lock_file.write(str(mypid) + "\n")
     lock_file.flush()
-    atexit.register(remove_pidfile, lock_file, filename)
+    atexit.register(remove_pidfile, lock_file, filename, mypid)
     return lock_file
 
 
@@ -127,9 +131,10 @@ def run_app(config, descending=False):
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        logger.exception("Unhandled Exception %s %s", type(e).__name__, str(e))
+        logger.exception("%s %s", type(e).__name__, str(e))
         sys.exit(1)
 
+    logger.info("Leave app.run")
     return 0
 
 
@@ -140,7 +145,9 @@ def run_child(config, descending, proc_pool):
     return run_app(config, descending)
 
 
-def stop_workers(pool):
+def stop_workers(pool, mypid):
+    if mypid != os.getpid():
+        return
     for k, p in pool.items():
         process = p.get('process', None)
         if process and process.is_alive():
@@ -162,7 +169,7 @@ def run_workers(config):
     if workers > 1:
         pool['bwd'] = dict(target=run_child, args=(config, 1, pool), name='WorkerBackward')
 
-    atexit.register(stop_workers, pool)
+    atexit.register(stop_workers, pool, os.getpid())
 
     while pool:
         for k, p in pool.items():
@@ -174,7 +181,7 @@ def run_workers(config):
                 p['process'] = process
             if process.is_alive():
                 process.join(1)
-            elif process.exitcode == 0:
+            elif process.exitcode == 0 and k == 'bwd': # only 4 backward child
                 logger.info("Success stop child %s", process.name)
                 pool.pop(k)
             else:
@@ -184,6 +191,7 @@ def run_workers(config):
             time.sleep(0.5)
 
     logger.info("Leave watcher")
+    return 0
 
 
 def parse_args():
@@ -225,9 +233,10 @@ def main():
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        logger.exception("Unhandled Exception %s %s", type(e).__name__, str(e))
+        logger.exception("%s %s", type(e).__name__, str(e))
         sys.exit(1)
 
+    logger.info("Leave main")
     return 0
 
 if __name__ == "__main__":

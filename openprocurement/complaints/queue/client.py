@@ -37,7 +37,7 @@ class ComplaintsClient(object):
         'fast_rewind': False,
         'skip_until': None,
         'reset_hour': 22,
-        'clear_wday': 6,
+        'clear_cache': 6,
         'sleep': 10,
     }
 
@@ -60,13 +60,13 @@ class ComplaintsClient(object):
         for k in ['use_cache', 'store_claim', 'store_draft', 'fast_rewind']:
             self.client_config[k] = getboolean(self.client_config.get(k))
         self.reset_client_hour = int(self.client_config['reset_hour'])
-        self.clear_cache_wday = int(self.client_config['clear_wday'])
+        self.clear_cache_wday = int(self.client_config['clear_cache'])
         self.reset_client()
 
     @property
     def should_stop(self):
         if self.watchdog and self.watchdog.counter > 1:
-            return True
+            raise self.watchdog.WatchdogError("should_stop")
         return self.needstop
 
     def sleep(self, seconds):
