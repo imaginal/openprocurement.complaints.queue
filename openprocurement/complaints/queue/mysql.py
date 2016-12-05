@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import MySQLdb
 import simplejson as json
-from openprocurement.complaints.queue.client import ComplaintsClient, logger
+from openprocurement.complaints.queue.client import ComplaintsClient, getboolean, logger
 
 
 class ComplaintsToMySQL(ComplaintsClient):
@@ -13,6 +13,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         'passwd': '',
         'db': 'complaints',
         'table': 'complaints',
+        'continue': True
     }
 
     def __init__(self, client_config=None, mysql_config=None):
@@ -22,9 +23,11 @@ class ComplaintsToMySQL(ComplaintsClient):
         # remove passwd before dump config to log
         self.mysql_passwd = self.mysql_config.pop('passwd')
         self.table_name = self.mysql_config.pop('table')
+        self.continue_skip_until = self.mysql_config.pop('continue')
         self.create_cursor()
         self.create_table()
-        self.update_skip_until()
+        if getboolean(self.continue_skip_until):
+            self.restore_skip_until()
 
     def create_cursor(self):
         logger.info("Connect to mysql {} table '{}'".format(
@@ -106,7 +109,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.execute_query("TRUNCATE TABLE {table_name}_cache")
         self.dbcon.commit()
 
-    def update_skip_until(self):
+    def restore_skip_until(self):
         self.execute_query("SELECT MAX(complaint_dateSubmitted) FROM {table_name}")
         row = self.cursor.fetchone()
         if not row or not row[0]:

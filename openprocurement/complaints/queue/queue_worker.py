@@ -124,6 +124,7 @@ def run_app(config, descending=False):
     if descending:
         logger.info("Start in descending mode")
         client_config.append(('descending', 1))
+        mysql_config.append(('continue', 0))
 
     app = ComplaintsToMySQL(client_config, mysql_config)
     app.watchdog = Watchdog

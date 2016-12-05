@@ -271,6 +271,9 @@ class ComplaintsClient(object):
                 self.client_rewind(self.skip_until)
 
     def client_skip_until(self, skip_until=None, skip_days=0):
+        if self.client_config.get('descending', False) and skip_until:
+            logger.info("Ignore skip_until %s in descending mode", skip_until)
+            return
         if not skip_until:
             skip_until = self.client_config['skip_until']
         if skip_until and skip_until[:2] == "20":
