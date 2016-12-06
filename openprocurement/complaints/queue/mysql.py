@@ -23,6 +23,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         'connect_timeout': 300,
         'drop_cache': False,
         'keep_alive': True,
+        'max_packet': 500000,
     }
 
     def __init__(self, client_config=None, mysql_config=None):
@@ -34,6 +35,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.table_name = self.mysql_config.pop('table')
         self.drop_cache = self.mysql_config.pop('drop_cache')
         self.keep_alive = self.mysql_config.pop('keep_alive')
+        self.max_packet = int(self.mysql_config.pop('max_packet'))
         for k in ['init_command']:
             self.mysql_config[k] = self.mysql_config[k].strip(' \t"')
         for k in ['connect_timeout']:
@@ -187,9 +189,11 @@ class ComplaintsToMySQL(ComplaintsClient):
         if len(complaint_json) > 65000:
             logger.warning("Too big T=%s P=%s C=%s size=%d", complaint.tender.id,
                 complaint_path, complaint.id, len(complaint_json))
-        if len(complaint_json) > 500000:
-            complaint.title = complaint.title[:4000] + "... (truncated)"
-            complaint.description = complaint.description[:80000] + "... (truncated)"
+        if len(complaint_json) > self.max_packet:
+            max_title = int(self.max_packet / 125)
+            max_descr = int(self.max_packet / 6.25)
+            complaint.title = complaint.title[:max_title] + " (truncated)"
+            complaint.description = complaint.description[:max_descr] + " (truncated)"
             complaint_json = json.dumps(complaint)
             logger.warning("Complaint T=%s P=%s C=%s truncated to size=%d",
                 complaint.tender.id, complaint_path, complaint.id, len(complaint_json))
