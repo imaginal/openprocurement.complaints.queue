@@ -281,7 +281,7 @@ class ComplaintsClient(object):
             logger.debug("Rewind client, last %s", item['dateModified'])
         self.client.params.pop('descending')
 
-    def update_offset_before_start(self):
+    def fast_update_offset(self):
         if self.descending_mode:
             return
         if self.skip_until and self.client_config['fast_rewind']:
@@ -290,7 +290,7 @@ class ComplaintsClient(object):
             if self.client_config['feed'] == 'changes':
                 self.client_rewind(self.skip_until)
 
-    def client_skip_until(self, skip_until=None, skip_days=0):
+    def set_client_skip_until(self, skip_until=None, skip_days=0):
         if self.descending_mode and skip_until:
             logger.info("Ignore skip_until %s in descending mode", skip_until)
             return
@@ -305,7 +305,7 @@ class ComplaintsClient(object):
         self.skip_until = skip_until
 
     @retry(stop_max_attempt_number=5, wait_fixed=5000)
-    def reset_client(self):
+    def reset_client(self, hard_reset=False):
         logger.info("Reset Client {}".format(self.client_config))
         if self.client_config['mode'] not in ['', '_all_', 'test']:
             logger.warning("Unknown client mode '%s'", self.client_config['mode'])
@@ -325,7 +325,9 @@ class ComplaintsClient(object):
         if self.descending_mode:
             client_options['params']['descending'] = "1"
         self.client = TendersClient(**client_options)
-        self.client_skip_until()
+        self.set_client_skip_until()
+        if not hard_reset:
+            self.fast_update_offset()
         self.last_reset_time = time()
         self.client_errors = 0
         self.tenders_count = 0
@@ -336,11 +338,10 @@ class ComplaintsClient(object):
             self.reset_client()
 
     def run(self):
-        self.update_offset_before_start()
         while not self.should_stop:
             if self.need_clear_cache():
                 self.clear_cache()
             if self.need_reset_client():
-                self.reset_client()
+                self.reset_client(True)
             self.process_all()
             self.sleep(self.conf_sleep)
