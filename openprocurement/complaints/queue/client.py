@@ -205,7 +205,7 @@ class ComplaintsClient(object):
                 feed = self.client_config['feed'] or 'changes'
                 tenders_list = self.client.get_tenders(feed=feed)
             except Exception as e:
-                logger.exception("Fail get_tenders")
+                logger.error("Fail get_tenders {}: {}".format(type(e), e))
                 self.sleep(10 * sleep_time)
                 self.handle_error(e)
                 continue
@@ -224,7 +224,7 @@ class ComplaintsClient(object):
                 try:
                     self.process_tender(tender)
                 except Exception as e:
-                    logger.exception("Fail on {} error {}: {}".format(tender, type(e), e))
+                    logger.error("Fail on {} error {}: {}".format(tender, type(e), e))
                     self.sleep(10 * sleep_time)
                     self.handle_error(e)
 
@@ -265,7 +265,7 @@ class ComplaintsClient(object):
             try:
                 tenders_list = self.client.get_tenders()
             except Exception as e:
-                logger.error("get_tenders %s", str(e))
+                logger.error("Failed get_tenders %s %s", type(e), str(e))
                 self.client.params.pop('offset', None)
                 break
             if not tenders_list or i >= 99:
