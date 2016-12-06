@@ -23,7 +23,7 @@ def retry(ExceptionToCheck=Exception, tries=5, delay=5, backoff=2, logger=None):
                     raise
                 except ExceptionToCheck, e:
                     if logger:
-                        logger.warning("%s, Retrying in %d seconds..." % (str(e), mdelay))
+                        logger.error("%s, Retrying in %d seconds..." % (str(e), mdelay))
                     for i in range(int(10 * mdelay)):
                         time.sleep(0.1)
                     mtries -= 1

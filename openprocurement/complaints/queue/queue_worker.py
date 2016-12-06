@@ -191,9 +191,14 @@ def run_workers(config):
             process = p.get('process', None)
             if not process:
                 logger.info("Start child %s", p['name'])
-                process = Process(**p)
-                process.daemon = True
-                process.start()
+                try:
+                    process = Process(**p)
+                    process.daemon = True
+                    process.start()
+                except:
+                    logger.error("Can't start process")
+                    time.sleep(1)
+                    continue
                 p['process'] = process
                 time.sleep(0.5)
             if process.is_alive():
