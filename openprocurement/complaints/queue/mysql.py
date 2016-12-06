@@ -98,8 +98,7 @@ class ComplaintsToMySQL(ComplaintsClient):
             """
         warnings.filterwarnings('error', category=MySQLdb.Warning)
         try:
-            if not self.query_and_fetchone("SELECT 1 FROM {table_name} LIMIT 1"):
-                raise MySQLdb.MySQLError()
+            self.query_and_fetchone("SELECT 1 FROM {table_name} LIMIT 1")
         except MySQLdb.MySQLError:
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
@@ -108,10 +107,10 @@ class ComplaintsToMySQL(ComplaintsClient):
         # drop cache if we create main table
         if getboolean(self.drop_cache):
             try:
-                if self.query_and_fetchone("SELECT 1 FROM {table_name}_cache LIMIT 1"):
-                    logger.warning("Drop cache table %s_cache", self.table_name)
-                    self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
-                    self.dbcon.commit()
+                self.query_and_fetchone("SELECT 1 FROM {table_name}_cache LIMIT 1")
+                logger.warning("Drop cache table %s_cache", self.table_name)
+                self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
+                self.dbcon.commit()
             except MySQLdb.MySQLError:
                 self.dbcon.rollback()
         # create tenders cache
@@ -122,8 +121,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                 ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             """
         try:
-            if not self.query_and_fetchone("SELECT 1 FROM {table_name}_cache LIMIT 1"):
-                raise MySQLdb.MySQLError()
+            self.query_and_fetchone("SELECT 1 FROM {table_name}_cache LIMIT 1")
         except MySQLdb.MySQLError:
             logger.warning("Create table '%s_cache'", self.table_name)
             self.execute_query(SQL)

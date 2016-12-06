@@ -195,6 +195,7 @@ def run_workers(config):
                 process.daemon = True
                 process.start()
                 p['process'] = process
+                time.sleep(0.5)
             if process.is_alive():
                 process.join(1)
             else:
