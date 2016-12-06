@@ -180,9 +180,9 @@ def run_workers(config):
     pool = {}
 
     if workers > 0:
-        pool['fwd'] = dict(target=run_child, args=(config, 0, pool), name='WorkerForward')
+        pool['fwd'] = dict(target=run_child, args=(config, 0, pool), name='Worker.Forward')
     if workers > 1:
-        pool['bwd'] = dict(target=run_child, args=(config, 1, pool), name='WorkerBackward')
+        pool['bwd'] = dict(target=run_child, args=(config, 1, pool), name='Worker.Backward')
 
     atexit.register(stop_workers, pool, os.getpid())
 

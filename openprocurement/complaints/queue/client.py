@@ -218,7 +218,7 @@ class ComplaintsClient(object):
             try:
                 feed = self.client_config['feed'] or 'changes'
                 tenders_list = self.client.get_tenders(feed=feed)
-            except StandardError:
+            except (SystemExit, KeyboardInterrupt):
                 raise
             except Exception as e:
                 logger.error("Fail get_tenders {}: {}".format(type(e), e))
@@ -239,7 +239,7 @@ class ComplaintsClient(object):
                     continue
                 try:
                     self.process_tender(tender)
-                except StandardError:
+                except (SystemExit, KeyboardInterrupt):
                     raise
                 except Exception as e:
                     logger.error("Fail on {} error {}: {}".format(tender, type(e), e))

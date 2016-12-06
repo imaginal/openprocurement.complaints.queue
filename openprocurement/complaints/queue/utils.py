@@ -19,7 +19,7 @@ def retry(ExceptionToCheck=Exception, tries=5, delay=5, backoff=2, logger=None):
             while mtries > 1:
                 try:
                     return f(*args, **kwargs)
-                except StandardError:
+                except (SystemExit, KeyboardInterrupt):
                     raise
                 except ExceptionToCheck, e:
                     if logger:
