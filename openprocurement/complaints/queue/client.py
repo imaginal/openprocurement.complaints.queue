@@ -1,23 +1,37 @@
 # -*- coding: utf-8 -*-
 from time import sleep, time
 from munch import munchify
-from retrying import retry
 from iso8601 import parse_date
 from datetime import datetime, timedelta
+from simplejson import dumps, loads
+from restkit.errors import ResourceNotFound
 from openprocurement_client.client import TendersClient
+from openprocurement_client.exceptions import InvalidResponse
+from openprocurement.complaints.queue.utils import getboolean, retry
 
 import socket
 import logging
 logger = logging.getLogger(__name__)
 
 
-def getboolean(value):
-    bool_dict = {'y': 1, 'n': 0, 'yes': 1, 'no': 0,
-        'on': 1, 'off': 0, 'true': 1, 'false': 0}
-    try:
-        return bool_dict[value.strip().lower()]
-    except:
-        return int(value or 0)
+class SafeTendersClient(TendersClient):
+    # get_tenders with improved @retry decorator
+    @retry(tries=5, delay=1, logger=logger)
+    def get_tenders(self, params={}, feed='changes'):
+        params['feed'] = feed
+        try:
+            self._update_params(params)
+            response = self.get(
+                self.prefix_path,
+                params_dict=self.params)
+            if response.status_int == 200:
+                tender_list = munchify(loads(response.body_string()))
+                self._update_params(tender_list.next_page)
+                return tender_list.data
+        except ResourceNotFound:
+            del self.params['offset']
+            raise
+        raise InvalidResponse
 
 
 class ComplaintsClient(object):
@@ -76,11 +90,11 @@ class ComplaintsClient(object):
             self.watchdog.counter = 0
 
     def sleep(self, seconds):
-        for i in range(int(2 * seconds)):
+        for i in range(int(10 * seconds)):
             if self.should_stop:
                 break
             self.reset_watchdog()
-            sleep(0.5)
+            sleep(0.1)
 
     def clear_cache(self):
         logger.debug("Fake clear cache")
@@ -165,7 +179,7 @@ class ComplaintsClient(object):
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)
 
-    @retry(stop_max_attempt_number=5, wait_fixed=5000)
+    @retry(tries=5, delay=1, logger=logger)
     def get_tender_data(self, tender_id):
         self.reset_watchdog()
         tender = self.client.get_tender(tender_id)
@@ -204,6 +218,8 @@ class ComplaintsClient(object):
             try:
                 feed = self.client_config['feed'] or 'changes'
                 tenders_list = self.client.get_tenders(feed=feed)
+            except StandardError:
+                raise
             except Exception as e:
                 logger.error("Fail get_tenders {}: {}".format(type(e), e))
                 self.sleep(10 * sleep_time)
@@ -223,6 +239,8 @@ class ComplaintsClient(object):
                     continue
                 try:
                     self.process_tender(tender)
+                except StandardError:
+                    raise
                 except Exception as e:
                     logger.error("Fail on {} error {}: {}".format(tender, type(e), e))
                     self.sleep(10 * sleep_time)
@@ -264,6 +282,8 @@ class ComplaintsClient(object):
             self.reset_watchdog()
             try:
                 tenders_list = self.client.get_tenders()
+            except StandardError:
+                raise
             except Exception as e:
                 logger.error("Failed get_tenders %s %s", type(e), str(e))
                 self.client.params.pop('offset', None)
@@ -304,7 +324,7 @@ class ComplaintsClient(object):
         logger.info("Set skip_until=%s", skip_until)
         self.skip_until = skip_until
 
-    @retry(stop_max_attempt_number=5, wait_fixed=5000)
+    @retry(tries=5, delay=1, logger=logger)
     def reset_client(self, hard_reset=False):
         logger.info("Reset Client {}".format(self.client_config))
         if self.client_config['mode'] not in ['', '_all_', 'test']:
@@ -324,7 +344,7 @@ class ComplaintsClient(object):
         }
         if self.descending_mode:
             client_options['params']['descending'] = "1"
-        self.client = TendersClient(**client_options)
+        self.client = SafeTendersClient(**client_options)
         self.set_client_skip_until()
         if not hard_reset:
             self.fast_update_offset()

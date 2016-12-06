@@ -2,8 +2,11 @@
 import MySQLdb
 import warnings
 import simplejson as json
-from retrying import retry
-from openprocurement.complaints.queue.client import ComplaintsClient, getboolean, logger
+from openprocurement.complaints.queue.client import ComplaintsClient
+from openprocurement.complaints.queue.utils import getboolean, retry
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 class ComplaintsToMySQL(ComplaintsClient):
@@ -39,7 +42,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.create_table()
         self.restore_skip_until()
 
-    @retry(stop_max_attempt_number=5, wait_fixed=5000)
+    @retry(tries=5, delay=1, logger=logger)
     def create_cursor(self):
         logger.info("Connect to mysql {} table '{}'".format(
             self.mysql_config, self.table_name))
@@ -48,6 +51,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         if getattr(self, 'dbcon', None):
             dbcon, self.dbcon = self.dbcon, None
             dbcon.close()
+        self.mysql_config.pop('connect_timeout', None)
         self.dbcon = MySQLdb.Connect(passwd=self.mysql_passwd,
             **self.mysql_config)
         self.cursor = self.dbcon.cursor()
@@ -158,8 +162,9 @@ class ComplaintsToMySQL(ComplaintsClient):
         if not getboolean(self.keep_alive):
             return
         try:
-            self.execute_query("SELECT 1")
+            self.dbcon.ping(True)
         except MySQLdb.MySQLError as e:
+            logger.error("Error ping mysql %s", str(e))
             self.handle_error(e)
 
     def check_exists(self, tender, complaint_path, complaint):
@@ -182,6 +187,12 @@ class ComplaintsToMySQL(ComplaintsClient):
         if len(complaint_json) > 65000:
             logger.warning("Too big T=%s P=%s C=%s size=%d", complaint.tender.id,
                 complaint_path, complaint.id, len(complaint_json))
+        if len(complaint_json) > 500000:
+            complaint.title = complaint.title[:4000] + "... (truncated)"
+            complaint.description = complaint.description[:80000] + "... (truncated)"
+            complaint_json = json.dumps(complaint)
+            logger.warning("Complaint T=%s P=%s C=%s truncated to size=%d",
+                complaint.tender.id, complaint_path, complaint.id, len(complaint_json))
         insert_data = [
             ('tender_id', complaint.tender.id),
             ('tender_status', complaint.tender.status),

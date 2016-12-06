@@ -28,10 +28,10 @@ class Watchdog:
 
 def sigalrm_handler(signum, frame):
     if Watchdog.counter >= Watchdog.timeout:
-        raise Watchdog.TimeoutError()
+        os._exit(1)
 
 
-def thread_watchdog():
+def watchdog_thread():
     while True:
         Watchdog.counter += 1
         time.sleep(1)
@@ -39,12 +39,11 @@ def thread_watchdog():
             logger.warning("Watchdog counter %d", Watchdog.counter)
         if Watchdog.counter == Watchdog.timeout:
             os.kill(os.getpid(), signal.SIGTERM)
-            signal.alarm(1)
-        if Watchdog.counter >= Watchdog.timeout + 5:
+        if Watchdog.counter >= Watchdog.timeout + 2:
             os._exit(1)
             break
         if Watchdog.prntpid and Watchdog.prntpid != os.getppid():
-            raise RuntimeError("Parent pid changed")
+            raise SystemExit("Parent pid changed")
 
 
 def setup_watchdog(timeout):
@@ -52,17 +51,16 @@ def setup_watchdog(timeout):
         return
     signal.signal(signal.SIGALRM, sigalrm_handler)
     Watchdog.timeout = int(timeout)
-    t = Thread(target=thread_watchdog)
-    t.daemon = True
-    t.start()
+    thread = Thread(target=watchdog_thread)
+    thread.daemon = True
+    thread.start()
+    Watchdog._thread = thread
 
 
 def sigterm_handler(signo, frame):
     logger.warning("Signal received %d", signo)
     if Watchdog.counter >= Watchdog.timeout:
-        raise Watchdog.TimeoutError()
-    Watchdog.counter = Watchdog.timeout
-    signal.alarm(1)
+        sys.exit(1)
     sys.exit(0)
 
 
@@ -140,11 +138,11 @@ def run_app(config, descending=False):
     app.watchdog = Watchdog
     try:
         app.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         sys.exit(2)
     except Exception as e:
         logger.exception("%s %s", type(e).__name__, str(e))
-        Watchdog.counter = Watchdog.timeout
+        Watchdog.counter = Watchdog.timeout - 1
         sys.exit(1)
 
     logger.info("Leave worker")
@@ -164,8 +162,9 @@ def stop_workers(pool, mypid):
     for k, p in pool.items():
         process = p.get('process', None)
         if process and process.is_alive():
-            logger.info("Stop child %s", process.name)
+            logger.info("Stop child %s %d", process.name, process.pid)
             process.terminate()
+            time.sleep(0.1)
     pool = {}
 
 
@@ -193,6 +192,7 @@ def run_workers(config):
             if not process:
                 logger.info("Start child %s", p['name'])
                 process = Process(**p)
+                process.daemon = True
                 process.start()
                 p['process'] = process
             if process.is_alive():
@@ -242,7 +242,7 @@ def main():
 
     try:
         run_workers(config)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         sys.exit(2)
     except Exception as e:
         logger.exception("%s %s", type(e).__name__, str(e))
