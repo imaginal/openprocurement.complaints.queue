@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SafeTendersClient(TendersClient):
     # get_tenders with improved @retry decorator
-    @retry(tries=5, delay=1, logger=logger)
+    @retry(tries=5, delay=5, logger=logger)
     def get_tenders(self, params={}, feed='changes'):
         params['feed'] = feed
         try:
@@ -179,7 +179,7 @@ class ComplaintsClient(object):
         self.patch_before_store(tender, complaint, complaint_path)
         self.store(complaint, complaint_path)
 
-    @retry(tries=5, delay=1, logger=logger)
+    @retry(tries=5, delay=5, logger=logger)
     def get_tender_data(self, tender_id):
         self.reset_watchdog()
         tender = self.client.get_tender(tender_id)
@@ -324,7 +324,7 @@ class ComplaintsClient(object):
         logger.info("Set skip_until=%s", skip_until)
         self.skip_until = skip_until
 
-    @retry(tries=5, delay=1, logger=logger)
+    @retry(tries=5, delay=5, logger=logger)
     def reset_client(self, hard_reset=False):
         logger.info("Reset client {}".format(self.client_config))
         if self.client_config['mode'] not in ['', '_all_', 'test']:

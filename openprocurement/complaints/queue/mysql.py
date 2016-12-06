@@ -44,7 +44,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.create_tables()
         self.restore_skip_until()
 
-    @retry(tries=5, delay=1, logger=logger)
+    @retry(tries=5, delay=5, logger=logger)
     def create_cursor(self):
         logger.info("Connect to mysql {} table '{}'".format(
             self.mysql_config, self.table_name))
