@@ -120,8 +120,11 @@ class ComplaintsToMySQL(ComplaintsClient):
         if getattr(self, 'dbcon', None) is None:
             return
         logger.warning("Clear cache table '%s_cache'", self.table_name)
-        self.execute_query("TRUNCATE TABLE {table_name}_cache")
-        self.dbcon.commit()
+        try:
+            self.execute_query("TRUNCATE TABLE {table_name}_cache")
+            self.dbcon.commit()
+        except MySQLdb.MySQLError as e:
+            logger.error("Can't clear cache %s", str(e))
 
     def restore_skip_until(self):
         if self.descending_mode:
@@ -136,7 +139,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                 row_date, self.skip_until)
             return
         logger.info("Restore offset from database '%s'", row_date)
-        self.client_skip_until(row_date, skip_days=1)
+        self.set_client_skip_until(row_date, skip_days=1)
 
     def check_cache(self, tender):
         self.execute_query(("SELECT tender_dateModified FROM {table_name}_cache " +
