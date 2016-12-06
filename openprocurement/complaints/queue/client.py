@@ -270,7 +270,7 @@ class ComplaintsClient(object):
             return
         date = datetime.now() - timedelta(days=10)
         if skip_until < date.strftime("%Y-%m-%d"):
-            logger.info("%s is too old for fast_rewind", skip_until)
+            logger.info("Current skip_until %s is too old for fast_rewind", skip_until)
             return
         if skip_days:
             date = parse_date(skip_until) - timedelta(days=skip_days)
