@@ -40,7 +40,7 @@ def thread_watchdog():
         if Watchdog.counter == Watchdog.timeout:
             os.kill(os.getpid(), signal.SIGTERM)
             signal.alarm(1)
-        if Watchdog.counter > Watchdog.timeout + 5:
+        if Watchdog.counter >= Watchdog.timeout + 5:
             os._exit(1)
             break
         if Watchdog.prntpid and Watchdog.prntpid != os.getppid():
