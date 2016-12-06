@@ -60,6 +60,7 @@ class ComplaintsClient(object):
     last_reset_time = 0
     client_errors = 0
     tenders_count = 0
+    skipped_count = 0
 
     store_tender_fields = ['id', 'tenderID', 'title', 'status', 'mode',
         'procuringEntity', 'procurementMethod', 'procurementMethodType',
@@ -187,7 +188,8 @@ class ComplaintsClient(object):
 
     def process_tender(self, tender):
         if self.client_config['use_cache'] and self.check_cache(tender):
-            logger.debug("Exists T=%s DM=%s", tender.id, tender.dateModified)
+            logger.debug("Exists T=%s DM=%s by cache", tender.id, tender.dateModified)
+            self.skipped_count += 1
             return
 
         logger.debug("Tender T=%s DM=%s", tender.id, tender.dateModified)
@@ -230,12 +232,14 @@ class ComplaintsClient(object):
                 break
 
             tender = None
+
             for tender in tenders_list:
                 self.tenders_count += 1
                 if self.should_stop:
                     break
                 if self.skip_until and self.skip_until > tender.dateModified:
-                    logger.debug("Ignore T=%s DM=%s", tender.id, tender.dateModified)
+                    logger.debug("Ignore T=%s DM=%s by skip_until", tender.id, tender.dateModified)
+                    self.skipped_count += 1
                     continue
                 try:
                     self.process_tender(tender)
@@ -247,8 +251,10 @@ class ComplaintsClient(object):
                     self.handle_error(e)
 
             if tender:
-                logger.info("Processed %d tenders, last %s",
-                    self.tenders_count, tender.get('dateModified'))
+                logger.info("Processed %d tenders %d skipped, last %s",
+                    self.tenders_count, self.skipped_count, tender.get('dateModified'))
+            else:
+                break
 
             if sleep_time:
                 self.sleep(sleep_time)
@@ -351,6 +357,7 @@ class ComplaintsClient(object):
         self.last_reset_time = time()
         self.client_errors = 0
         self.tenders_count = 0
+        self.skipped_count = 0
 
     def handle_error(self, error):
         self.client_errors += 1
