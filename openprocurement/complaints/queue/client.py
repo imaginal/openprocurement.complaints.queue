@@ -326,7 +326,7 @@ class ComplaintsClient(object):
 
     @retry(tries=5, delay=1, logger=logger)
     def reset_client(self, hard_reset=False):
-        logger.info("Reset Client {}".format(self.client_config))
+        logger.info("Reset client {}".format(self.client_config))
         if self.client_config['mode'] not in ['', '_all_', 'test']:
             logger.warning("Unknown client mode '%s'", self.client_config['mode'])
         if self.client_config['feed'] not in ['changes', 'dateModified']:

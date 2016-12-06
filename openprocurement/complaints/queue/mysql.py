@@ -41,7 +41,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         for k in ['connect_timeout']:
             self.mysql_config[k] = int(self.mysql_config[k] or 0)
         self.create_cursor()
-        self.create_table()
+        self.create_tables()
         self.restore_skip_until()
 
     @retry(tries=5, delay=1, logger=logger)
@@ -64,10 +64,14 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.cursor = None
             self.create_cursor()
 
-    def execute_query(self, sql, *args, **kwargs):
+    def execute_query(self, sql, *args):
         return self.cursor.execute(sql.format(table_name=self.table_name), *args)
 
-    def create_table(self):
+    def query_and_fetchone(self, sql, *args):
+        self.execute_query(sql, *args)
+        return self.cursor.fetchone()
+
+    def create_tables(self):
         SQL = """CREATE TABLE IF NOT EXISTS {table_name} (
                   tender_id char(32) NOT NULL,
                   tender_status varchar(40) NOT NULL,
@@ -94,7 +98,8 @@ class ComplaintsToMySQL(ComplaintsClient):
             """
         warnings.filterwarnings('error', category=MySQLdb.Warning)
         try:
-            self.execute_query("SELECT 1 FROM {table_name} LIMIT 1")
+            if not self.query_and_fetchone("SELECT 1 FROM {table_name} LIMIT 1"):
+                raise MySQLdb.MySQLError()
         except MySQLdb.MySQLError:
             logger.warning("Create table '%s'", self.table_name)
             self.execute_query(SQL)
@@ -102,12 +107,13 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.drop_cache = True
         # drop cache if we create main table
         if getboolean(self.drop_cache):
-            logger.warning("Drop cache table")
             try:
-                self.execute_query("SELECT 1 FROM {table_name}_cache LIMIT 1")
+                if self.query_and_fetchone("SELECT 1 FROM {table_name}_cache LIMIT 1"):
+                    logger.warning("Drop cache table %s_cache", self.table_name)
+                    self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
+                    self.dbcon.commit()
             except MySQLdb.MySQLError:
-                self.execute_query("DROP TABLE IF EXISTS {table_name}_cache")
-                self.dbcon.commit()
+                self.dbcon.rollback()
         # create tenders cache
         SQL = """CREATE TABLE IF NOT EXISTS {table_name}_cache (
                   tender_id char(32) NOT NULL,
@@ -116,7 +122,8 @@ class ComplaintsToMySQL(ComplaintsClient):
                 ) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             """
         try:
-            self.execute_query("SELECT 1 FROM {table_name}_cache LIMIT 1")
+            if not self.query_and_fetchone("SELECT 1 FROM {table_name}_cache LIMIT 1"):
+                raise MySQLdb.MySQLError()
         except MySQLdb.MySQLError:
             logger.warning("Create table '%s_cache'", self.table_name)
             self.execute_query(SQL)
@@ -131,12 +138,12 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.dbcon.commit()
         except MySQLdb.MySQLError as e:
             logger.error("Can't clear cache %s", str(e))
+            self.dbcon.rollback()
 
     def restore_skip_until(self):
         if self.descending_mode:
             return
-        self.execute_query("SELECT MAX(complaint_dateSubmitted) FROM {table_name}")
-        row = self.cursor.fetchone()
+        row = self.query_and_fetchone("SELECT MAX(complaint_dateSubmitted) FROM {table_name}")
         if not row or not row[0]:
             return
         row_date = row[0][:10]
@@ -148,9 +155,8 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.set_client_skip_until(row_date, skip_days=1)
 
     def check_cache(self, tender):
-        self.execute_query(("SELECT tender_dateModified FROM {table_name}_cache " +
+        row = self.query_and_fetchone(("SELECT tender_dateModified FROM {table_name}_cache " +
             "WHERE tender_id=%s LIMIT 1"), (tender.id,))
-        row = self.cursor.fetchone()
         return row and row[0] == tender.dateModified
 
     def finish_tender(self, tender):
@@ -170,9 +176,8 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.handle_error(e)
 
     def check_exists(self, tender, complaint_path, complaint):
-        self.execute_query(("SELECT tender_status, tender_dateModified " +
+        row = self.query_and_fetchone(("SELECT tender_status, tender_dateModified " +
             "FROM {table_name} WHERE complaint_id=%s LIMIT 1"), (complaint.id,))
-        row = self.cursor.fetchone()
         # don't update rows in terminal status
         if row and row[0] == "cancelled":
             logger.info("Ignore T=%s P=%s C=%s by TS=cancelled",
