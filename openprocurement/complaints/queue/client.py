@@ -78,6 +78,7 @@ class ComplaintsClient(object):
         self.descending_mode = getboolean(self.client_config.get('descending'))
         self.reset_client_hour = int(self.client_config['reset_hour'])
         self.clear_cache_wday = int(self.client_config['clear_cache'])
+        self.skip_until = self.client_config['skip_until']
         self.reset_client()
 
     @property
@@ -270,7 +271,7 @@ class ComplaintsClient(object):
             return time() - self.last_reset_time > 3600
         return False
 
-    def client_rewind(self, skip_until, skip_days=0):
+    def fast_client_rewind(self, skip_until, skip_days=0):
         if self.descending_mode:
             logger.warning("Don't rewind in descending_mode")
             return
@@ -309,14 +310,20 @@ class ComplaintsClient(object):
 
     def fast_update_offset(self):
         if self.descending_mode:
+            logger.warning("Don't update offset descending mode")
             return
-        if self.skip_until and self.client_config['fast_rewind']:
-            if self.client_config['feed'] == 'dateModified':
-                self.client.params['offset'] = self.skip_until
-            if self.client_config['feed'] == 'changes':
-                self.client_rewind(self.skip_until)
+        if not self.skip_until:
+            logger.info("skip_until is not set for update offset")
+            return
+        if not self.client_config['fast_rewind']:
+            logger.info("fast_rewind disabled in config, offset not changed")
+            return
+        if self.client_config['feed'] == 'dateModified':
+            self.client.params['offset'] = self.skip_until
+        if self.client_config['feed'] == 'changes':
+            self.fast_client_rewind(self.skip_until)
 
-    def set_client_skip_until(self, skip_until=None, skip_days=0):
+    def set_skip_until(self, skip_until=None, skip_days=0):
         if self.descending_mode and skip_until:
             logger.info("Ignore skip_until %s in descending mode", skip_until)
             return
@@ -327,11 +334,13 @@ class ComplaintsClient(object):
         if skip_days:
             date = parse_date(skip_until) - timedelta(days=skip_days)
             skip_until = date.strftime("%Y-%m-%d")
-        logger.info("Set skip_until=%s", skip_until)
-        self.skip_until = skip_until
+        if self.skip_until != skip_until:
+            logger.info("Set skip_until=%s", skip_until)
+            self.skip_until = skip_until
+            self.fast_update_offset()
 
     @retry(tries=5, delay=5, logger=logger)
-    def reset_client(self, hard_reset=False):
+    def reset_client(self, full_reset=False):
         logger.info("Reset client {}".format(self.client_config))
         if self.client_config['mode'] not in ['', '_all_', 'test']:
             logger.warning("Unknown client mode '%s'", self.client_config['mode'])
@@ -351,13 +360,11 @@ class ComplaintsClient(object):
         if self.descending_mode:
             client_options['params']['descending'] = "1"
         self.client = SafeTendersClient(**client_options)
-        self.set_client_skip_until()
-        if not hard_reset:
-            self.fast_update_offset()
         self.last_reset_time = time()
         self.client_errors = 0
         self.tenders_count = 0
         self.skipped_count = 0
+        self.fast_update_offset()
 
     def handle_error(self, error):
         self.client_errors += 1

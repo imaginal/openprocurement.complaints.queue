@@ -150,7 +150,7 @@ class ComplaintsToMySQL(ComplaintsClient):
                 row_date, self.skip_until)
             return
         logger.info("Restore offset from database '%s'", row_date)
-        self.set_client_skip_until(row_date, skip_days=1)
+        self.set_skip_until(row_date, skip_days=1)
 
     def check_cache(self, tender):
         row = self.query_and_fetchone(("SELECT tender_dateModified FROM {table_name}_cache " +
