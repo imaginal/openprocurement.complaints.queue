@@ -271,7 +271,7 @@ class ComplaintsClient(object):
             return time() - self.last_reset_time > 3600
         return False
 
-    def fast_client_rewind(self, skip_until, skip_days=0):
+    def fast_client_rewind(self, skip_until, minus_days=0):
         if self.descending_mode:
             logger.warning("Don't rewind in descending_mode")
             return
@@ -279,8 +279,8 @@ class ComplaintsClient(object):
         if skip_until < date.strftime("%Y-%m-%d"):
             logger.info("Current skip_until %s is too old for fast_rewind", skip_until)
             return
-        if skip_days:
-            date = parse_date(skip_until) - timedelta(days=skip_days)
+        if minus_days:
+            date = parse_date(skip_until) - timedelta(days=minus_days)
             skip_until = date.strftime("%Y-%m-%d")
         self.client.params.pop('offset', None)
         self.client.params['descending'] = "1"
@@ -323,7 +323,7 @@ class ComplaintsClient(object):
         if self.client_config['feed'] == 'changes':
             self.fast_client_rewind(self.skip_until)
 
-    def set_skip_until(self, skip_until=None, skip_days=0):
+    def set_skip_until(self, skip_until=None, minus_days=0):
         if self.descending_mode and skip_until:
             logger.info("Ignore skip_until %s in descending mode", skip_until)
             return
@@ -331,8 +331,8 @@ class ComplaintsClient(object):
             skip_until = self.client_config['skip_until']
         if skip_until and skip_until[:2] == "20":
             skip_until = skip_until[:10]
-        if skip_days:
-            date = parse_date(skip_until) - timedelta(days=skip_days)
+        if minus_days:
+            date = parse_date(skip_until) - timedelta(days=minus_days)
             skip_until = date.strftime("%Y-%m-%d")
         if self.skip_until != skip_until:
             logger.info("Set skip_until=%s", skip_until)
