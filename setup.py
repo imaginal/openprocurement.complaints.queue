@@ -28,7 +28,7 @@ setup(name='openprocurement.complaints.queue',
           'python-dateutil',
           'simplejson',
           'MySQL-python',
-          'openprocurement_client',
+          'openprocurement_client==1.0b3',
         ],
         entry_points={
           'console_scripts': [
