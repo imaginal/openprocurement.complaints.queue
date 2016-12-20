@@ -15,6 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 class SafeTendersClient(TendersClient):
+    def __init__(self, *args, **kwargs):
+        self.user_agent = kwargs.pop('user_agent', None)
+        self.timeout = kwargs.pop('timeout', 300)
+        if self.timeout: setdefaulttimeout(self.timeout)
+        super(TendersClient, self).__init__(*args, **kwargs)
+
+    def request(self, *args, **kwargs):
+        if 'User-Agent' not in self.headers and self.user_agent:
+            self.headers['User-Agent'] = self.user_agent
+        return super(TendersClient, self).request(*args, **kwargs)
+
     # get_tenders with improved @retry decorator
     @retry(tries=3, delay=10, logger=logger)
     def get_tenders(self, params={}, feed='changes'):
@@ -52,6 +63,7 @@ class ComplaintsClient(object):
         'skip_until': None,
         'reset_hour': 22,
         'clear_cache': 6,
+        'user_agent': '',
         'sleep': 10,
     }
 
@@ -356,6 +368,8 @@ class ComplaintsClient(object):
                 'mode': self.client_config['mode'],
                 'limit': self.client_config['limit'],
             },
+            'user_agent': 'Complaints/0.6 '+self.client_config['user_agent'],
+            'timeout': self.conf_timeout,
         }
         if self.descending_mode:
             client_options['params']['descending'] = "1"
