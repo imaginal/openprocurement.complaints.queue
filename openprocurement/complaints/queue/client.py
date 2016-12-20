@@ -18,7 +18,7 @@ class SafeTendersClient(TendersClient):
     def __init__(self, *args, **kwargs):
         self.user_agent = kwargs.pop('user_agent', None)
         self.timeout = kwargs.pop('timeout', 300)
-        if self.timeout: setdefaulttimeout(self.timeout)
+        if self.timeout: socket.setdefaulttimeout(self.timeout)
         super(TendersClient, self).__init__(*args, **kwargs)
 
     def request(self, *args, **kwargs):
