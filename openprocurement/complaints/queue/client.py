@@ -19,7 +19,7 @@ class SafeTendersClient(TendersClient):
         self.user_agent = kwargs.pop('user_agent', None)
         self.timeout = kwargs.pop('timeout', 300)
         if self.timeout: socket.setdefaulttimeout(self.timeout)
-        super(TendersClient, self).__init__(*args, **kwargs)
+        super(SafeTendersClient, self).__init__(*args, **kwargs)
 
     def request(self, *args, **kwargs):
         if 'User-Agent' not in self.headers and self.user_agent:
@@ -40,7 +40,7 @@ class SafeTendersClient(TendersClient):
                 self._update_params(tender_list.next_page)
                 return tender_list.data
         except ResourceNotFound:
-            del self.params['offset']
+            self.params.pop('offset', None)
             raise
         raise InvalidResponse
 
@@ -351,7 +351,7 @@ class ComplaintsClient(object):
             self.skip_until = skip_until
             self.fast_update_offset()
 
-    @retry(tries=10, delay=1, logger=logger)
+    @retry(tries=5, delay=1, logger=logger)
     def reset_client(self, full_reset=False):
         logger.info("Reset client {}".format(self.client_config))
         if self.client_config['mode'] not in ['', '_all_', 'test']:
