@@ -25,7 +25,8 @@ def retry(ExceptionToCheck=Exception, tries=5, delay=5, backoff=2, logger=None):
                     raise
                 except ExceptionToCheck, e:
                     if logger:
-                        logger.error("%s, Retrying in %d seconds..." % (str(e), mdelay))
+                        logger.error("%s: %s, Retrying in %d seconds...",
+                            type(e).__name__, str(e), mdelay)
                     for i in range(int(10 * mdelay)):
                         time.sleep(0.1)
                     mtries -= 1
@@ -40,17 +41,18 @@ def dump_error(e, client=None):
     try:
         if hasattr(e, 'response'):
             response = getattr(e, 'response', None)
+            status = getattr(response, 'status_int', None)
             headers = getattr(response, 'headers', None)
-            out += "\n  Status: " + str(response.status_int)
-            out += "\n  Headers: " + str(headers)
+            out += "\n\tStatus: " + str(status)
+            out += "\n\tHeaders: " + str(headers)
         if client:
             headers = getattr(client, 'headers', None)
             params = getattr(client, 'params', None)
             prefix = getattr(client, 'prefix_path')
             uri = getattr(client, 'uri')
-            out += "\n  RequestHeaders: " + str(headers)
-            out += "\n  RequestParams: " + str(params)
-            out += "\n  RequestURI: %s%s" % (uri, prefix)
+            out += "\n\tRequestHeaders: " + str(headers)
+            out += "\n\tRequestParams: " + str(params)
+            out += "\n\tRequestURI: %s%s" % (uri, prefix)
     except:
-        pass
+        out += " (dump error)"
     return out

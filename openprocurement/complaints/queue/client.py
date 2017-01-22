@@ -237,7 +237,7 @@ class ComplaintsClient(object):
             except (SystemExit, KeyboardInterrupt):
                 raise
             except Exception as e:
-                logger.error("GET /tenders %s", dump_error(e))
+                logger.error("GET /tenders %s", dump_error(e, self.client))
                 self.sleep(10 * sleep_time)
                 self.handle_error(e)
                 continue
@@ -260,7 +260,7 @@ class ComplaintsClient(object):
                 except (SystemExit, KeyboardInterrupt):
                     raise
                 except Exception as e:
-                    logger.error("GET /tenders/%s %s", tender['id'], dump_error(e))
+                    logger.error("GET /tenders/%s %s", tender['id'], dump_error(e, self.client))
                     self.sleep(10 * sleep_time)
                     self.handle_error(e)
 
@@ -305,7 +305,7 @@ class ComplaintsClient(object):
             except StandardError:
                 raise
             except Exception as e:
-                logger.error("GET /tenders %s", dump_error(e))
+                logger.error("GET /tenders %s", dump_error(e, self.client))
                 self.client.params.pop('offset', None)
                 break
             if not tenders_list or i >= 99:
