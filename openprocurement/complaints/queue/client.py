@@ -329,7 +329,7 @@ class ComplaintsClient(object):
             logger.info("skip_until is not set for update offset")
             return
         if not self.client_config['fast_rewind']:
-            logger.info("fast_rewind disabled in config, offset not changed")
+            logger.info("fast_rewind disabled in config")
             return
         if self.client_config['feed'] == 'dateModified':
             self.client.params['offset'] = self.skip_until
