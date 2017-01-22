@@ -5,11 +5,13 @@ from functools import wraps
 bool_dict = {'y': 1, 'n': 0, 'yes': 1, 'no': 0,
     'on': 1, 'off': 0, 'true': 1, 'false': 0}
 
+
 def getboolean(value):
     try:
         return bool_dict[value.strip().lower()]
     except:
         return int(value or 0)
+
 
 def retry(ExceptionToCheck=Exception, tries=5, delay=5, backoff=2, logger=None):
     def deco_retry(f):
@@ -31,3 +33,24 @@ def retry(ExceptionToCheck=Exception, tries=5, delay=5, backoff=2, logger=None):
             return f(*args, **kwargs)
         return f_retry  # true decorator
     return deco_retry
+
+
+def dump_error(e, client=None):
+    out = "{}: {}".format(type(e).__name__, e)
+    try:
+        if hasattr(e, 'response'):
+            response = getattr(e, 'response', None)
+            headers = getattr(response, 'headers', None)
+            out += "\n  Status: " + str(response.status_int)
+            out += "\n  Headers: " + str(headers)
+        if client:
+            headers = getattr(client, 'headers', None)
+            params = getattr(client, 'params', None)
+            prefix = getattr(client, 'prefix_path')
+            uri = getattr(client, 'uri')
+            out += "\n  RequestHeaders: " + str(headers)
+            out += "\n  RequestParams: " + str(params)
+            out += "\n  RequestURI: %s%s" % (uri, prefix)
+    except:
+        pass
+    return out

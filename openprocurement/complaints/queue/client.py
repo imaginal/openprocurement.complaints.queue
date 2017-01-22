@@ -3,11 +3,11 @@ from time import sleep, time
 from munch import munchify
 from iso8601 import parse_date
 from datetime import datetime, timedelta
-from simplejson import dumps, loads
+from simplejson import loads
 from restkit.errors import ResourceNotFound
 from openprocurement_client.client import TendersClient
 from openprocurement_client.exceptions import InvalidResponse
-from openprocurement.complaints.queue.utils import getboolean, retry
+from openprocurement.complaints.queue.utils import getboolean, retry, dump_error
 
 import socket
 import logging
@@ -18,7 +18,8 @@ class SafeTendersClient(TendersClient):
     def __init__(self, *args, **kwargs):
         self.user_agent = kwargs.pop('user_agent', None)
         self.timeout = kwargs.pop('timeout', 300)
-        if self.timeout: socket.setdefaulttimeout(self.timeout)
+        if self.timeout:
+            socket.setdefaulttimeout(self.timeout)
         super(SafeTendersClient, self).__init__(*args, **kwargs)
 
     def request(self, *args, **kwargs):
@@ -236,7 +237,7 @@ class ComplaintsClient(object):
             except (SystemExit, KeyboardInterrupt):
                 raise
             except Exception as e:
-                logger.error("Fail get_tenders {}: {}".format(type(e), e))
+                logger.error("GET /tenders %s", dump_error(e))
                 self.sleep(10 * sleep_time)
                 self.handle_error(e)
                 continue
@@ -259,7 +260,7 @@ class ComplaintsClient(object):
                 except (SystemExit, KeyboardInterrupt):
                     raise
                 except Exception as e:
-                    logger.error("Fail on {} error {}: {}".format(tender, type(e), e))
+                    logger.error("GET /tenders/%s %s", tender['id'], dump_error(e))
                     self.sleep(10 * sleep_time)
                     self.handle_error(e)
 
@@ -304,7 +305,7 @@ class ComplaintsClient(object):
             except StandardError:
                 raise
             except Exception as e:
-                logger.error("Failed get_tenders %s %s", type(e), str(e))
+                logger.error("GET /tenders %s", dump_error(e))
                 self.client.params.pop('offset', None)
                 break
             if not tenders_list or i >= 99:
@@ -368,12 +369,13 @@ class ComplaintsClient(object):
                 'mode': self.client_config['mode'],
                 'limit': self.client_config['limit'],
             },
-            'user_agent': 'Complaints/0.6 '+self.client_config['user_agent'],
+            'user_agent': 'Complaints/0.6 ' + self.client_config['user_agent'],
             'timeout': self.conf_timeout,
         }
         if self.descending_mode:
             client_options['params']['descending'] = "1"
         self.client = SafeTendersClient(**client_options)
+        logger.info("TendersClient %s", self.client.headers)
         self.last_reset_time = time()
         self.client_errors = 0
         self.tenders_count = 0
