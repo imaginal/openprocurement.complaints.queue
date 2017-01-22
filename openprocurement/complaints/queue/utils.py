@@ -43,16 +43,16 @@ def dump_error(e, client=None):
             response = getattr(e, 'response', None)
             status = getattr(response, 'status_int', None)
             headers = getattr(response, 'headers', None)
-            out += "\n\tStatus: " + str(status)
-            out += "\n\tHeaders: " + str(headers)
+            out += " Status:" + str(status)
+            out += " Headers:" + str(headers)
         if client:
             headers = getattr(client, 'headers', None)
             params = getattr(client, 'params', None)
             prefix = getattr(client, 'prefix_path')
             uri = getattr(client, 'uri')
-            out += "\n\tRequestHeaders: " + str(headers)
-            out += "\n\tRequestParams: " + str(params)
-            out += "\n\tRequestURI: %s%s" % (uri, prefix)
+            out += " RequestHeaders:" + str(headers)
+            out += " RequestParams:" + str(params)
+            out += " RequestURI:%s%s" % (uri, prefix)
     except:
         out += " (dump error)"
     return out
