@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 
-version = '0.6.2-beta'
+version = '0.6.3-beta'
 
 
 setup(name='openprocurement.complaints.queue',
@@ -27,7 +27,7 @@ setup(name='openprocurement.complaints.queue',
           'iso8601',
           'python-dateutil',
           'simplejson',
-          'MySQL-python',
+          'mysqlclient>=1.3',
           'openprocurement_client==1.0b3',
         ],
         entry_points={
