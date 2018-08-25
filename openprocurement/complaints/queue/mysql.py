@@ -20,7 +20,9 @@ class ComplaintsToMySQL(ComplaintsClient):
         'table': 'complaints',
         'charset': 'utf8',
         'init_command': 'SET NAMES utf8',
-        'connect_timeout': 300,
+        'connect_timeout': 10,
+        'read_timeout': 30,
+        'write_timeout': 30,
         'drop_cache': False,
         'keep_alive': True,
         'max_packet': 500000,
@@ -38,7 +40,7 @@ class ComplaintsToMySQL(ComplaintsClient):
         self.max_packet = int(self.mysql_config.pop('max_packet'))
         for k in ['init_command']:
             self.mysql_config[k] = self.mysql_config[k].strip(' \t"')
-        for k in ['connect_timeout']:
+        for k in ['connect_timeout', 'read_timeout', 'write_timeout']:
             self.mysql_config[k] = int(self.mysql_config[k] or 0)
         self.create_cursor()
         self.create_tables()
@@ -53,7 +55,6 @@ class ComplaintsToMySQL(ComplaintsClient):
         if getattr(self, 'dbcon', None):
             dbcon, self.dbcon = self.dbcon, None
             dbcon.close()
-        self.mysql_config.pop('connect_timeout', None)
         self.dbcon = MySQLdb.Connect(passwd=self.mysql_passwd,
             **self.mysql_config)
         self.cursor = self.dbcon.cursor()
