@@ -52,9 +52,15 @@ class ComplaintsToMySQL(ComplaintsClient):
             self.mysql_config, self.table_name))
         self.reset_watchdog()
         # close db handle if present
+        if getattr(self, 'cursor', None):
+            self.cursor = None
         if getattr(self, 'dbcon', None):
-            dbcon, self.dbcon = self.dbcon, None
-            dbcon.close()
+            try:
+                dbcon, self.dbcon = self.dbcon, None
+                dbcon.close()
+                del dbcon
+            except MySQLdb.MySQLError:
+                pass
         self.dbcon = MySQLdb.Connect(passwd=self.mysql_passwd,
             **self.mysql_config)
         self.cursor = self.dbcon.cursor()
